@@ -4,6 +4,17 @@
 
 A **Vite + TailwindCSS** WebView GUI template for **AutoHotkey v2**. Uses [WebViewToo](https://github.com/The-CoDingman/WebViewToo) to render a web-based frontend inside an AHK desktop window, with bidirectional message passing between the AHK script and the web frontend.
 
+## Launcher + core.dll (배포 구조)
+
+배포 형태는 폴더에 같이 넣는 `DEAN ROBLOX.exe`(런처) + `core.dll`(화면·기능) 두 파일입니다.
+
+- `launcher/launcher.ahk` → 컴파일하면 exe. 시작할 때 GitHub 릴리스(`releases/latest/download/`)의 `core.version`이 로컬 `core.dll`보다 높으면 `core.dll`+`core.dll.sha256`을 받아 해시 검증 후 교체하고, `core.dll`을 로드해 `NewThread`로 앱을 실행합니다. 화면(코어 스레드)이 끝나면 런처도 종료합니다.
+- `core.dll` = `vendor/AutoHotkey64.dll`(AutoHotkey_H 런타임) + 리소스(합친 앱 스크립트 `APP_SCRIPT`, `APP_VERSION`, `WEBVIEW2LOADER`, 화면 파일 `UI_*` + `UI_MANIFEST`). `scripts/bundle-core.mjs`가 `app.ahk`의 `#Include`를 펼치고, `scripts/pack-core.ahk`가 리소스를 넣습니다.
+- `app.ahk`는 개발 모드(`npm run dev`)와 코어 모드(`--core 화면폴더 로더경로 설정폴더` 인자)를 모두 지원합니다. 코어 모드에서는 `A_IsCompiled`가 false이므로 화면은 `BrowseFolder`로 지정합니다.
+- 빌드: `npm run build:core` → `build/core.dll`, `build/core.dll.sha256`, `build/core.version` / `npm run build:launcher` → `build/DEAN ROBLOX.exe`.
+- 릴리스: `version.txt`를 올리고 커밋한 뒤 같은 값의 태그(`v1.03`)를 push하면 `.github/workflows/release.yml`이 core.dll을 빌드해 릴리스로 올립니다. 런처(exe)는 직접 배포합니다.
+- `Ahk2Exe`는 상대 경로를 스크립트 위치 기준으로 해석하고 오류 시 창을 띄운 채 멈출 수 있으니, 컴파일은 `scripts/build-launcher.mjs`처럼 절대 경로 + `/silent`로 호출합니다.
+
 ## Repository Structure
 
 ```

@@ -5,18 +5,31 @@
 ;@Ahk2Exe-SetVersion 1.0.2.0
 ;@Ahk2Exe-SetCompanyName Roblox_DEAN
 ;@Ahk2Exe-SetCopyright Roblox_DEAN
-SetWorkingDir(A_ScriptDir)
 #SingleInstance force
+
+; ---------------- 실행 모드 ----------------
+; 개발: `npm run dev` (Vite 서버 화면). 컴파일: 예전 방식의 단일 exe.
+; 코어: 런처(exe)가 core.dll 안의 이 스크립트를 스레드로 실행합니다. 런처가
+; 인자로 "--core 화면폴더 WebView2Loader경로 설정폴더"를 넘깁니다.
+CoreMode := (A_Args.Length >= 4 && A_Args[1] = "--core")
+if (CoreMode) {
+	AppDir := A_Args[4]
+	; 오류가 나면 설정 폴더에 기록 (dll 안에서는 콘솔이 없어서 원인 파악용)
+	OnError((e, mode) => (FileAppend(FormatTime(, "yyyy-MM-dd HH:mm:ss") " " e.Message " (" e.What ", line " e.Line ")`n", AppDir "\core-error.log", "UTF-8"), 0))
+} else {
+	AppDir := A_ScriptDir
+	SetWorkingDir(A_ScriptDir)
+}
 
 OnExit(trueExit)
 SetWinDelay(-1)
 
 #Include webview\WebViewToo.ahk
 
-ConfigFile   := A_ScriptDir "\setting.dean"
+ConfigFile   := AppDir "\setting.dean"
 ; 예전 이름(setting.milky)의 설정이 있으면 새 이름으로 옮겨서 값을 유지합니다.
-if (FileExist(A_ScriptDir "\setting.milky") && !FileExist(ConfigFile))
-	FileMove(A_ScriptDir "\setting.milky", ConfigFile)
+if (FileExist(AppDir "\setting.milky") && !FileExist(ConfigFile))
+	FileMove(AppDir "\setting.milky", ConfigFile)
 
 ; ---------------- 잠수 방지 매크로 상태 ----------------
 targetExe    := "RobloxPlayerBeta.exe"
@@ -67,7 +80,10 @@ holdClickMs  := 40
 HoldClickCond := (*) => holdOn && WinActive("ahk_exe " targetExe)
 
 WebViewSettings := {}
-if (A_IsCompiled) {
+if (CoreMode) {
+	; 캐시 폴더를 exe 옆이 아니라 사용자 폴더에 둡니다
+	WebViewSettings := {DllPath: A_Args[3], DataDir: EnvGet("LOCALAPPDATA") "\DEAN_ROBLOX\webview"}
+} else if (A_IsCompiled) {
 	WebViewCtrl.CreateFileFromResource("64bit\WebView2Loader.dll", WebViewCtrl.TempDir)
     WebViewSettings := {DllPath: WebViewCtrl.TempDir "\64bit\WebView2Loader.dll"}
 }
@@ -75,6 +91,8 @@ if (A_IsCompiled) {
 MyGui := WebViewGui("-Resize -Caption",,, WebViewSettings)
 MyGui.OnEvent("Close", mygui_Close)
 MyGui.IsParentWindowDraggingEnabled := true
+if (CoreMode)
+	MyGui.BrowseFolder(A_Args[2])   ; 화면 파일이 풀려 있는 폴더를 ahk.localhost 로 연결
 
 MyGui.AddCallbackToScript("GetWindows", WebviewGetWindows)
 MyGui.AddCallbackToScript("Start", WebviewStart)
@@ -89,7 +107,7 @@ MyGui.AddCallbackToScript("SetChatEnabled", WebviewSetChatEnabled)
 MyGui.AddCallbackToScript("GetClickConfig", WebviewGetClickConfig)
 MyGui.AddCallbackToScript("SetClickSetting", WebviewSetClickSetting)
 
-if(A_IsCompiled) {
+if (A_IsCompiled || CoreMode) {
 	MyGui.Navigate("index.html")
 } else {
 	MyGui.Navigate("http://localhost:5173")

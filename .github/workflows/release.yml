@@ -1,20 +1,17 @@
-name: Release
+name: Release core.dll
 
+# 태그(v1.02 처럼 version.txt 와 같은 값)를 push 하면 core.dll 을 빌드해서 릴리스로 올립니다.
+# 런처(exe)는 이 릴리스의 core.version / core.dll.sha256 / core.dll 을 받아서 업데이트합니다.
 on:
   push:
     tags:
-      - "v*.*.*"
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Release tag (e.g. v1.0.0)"
-        required: true
+      - "v*"
 
 permissions:
   contents: write
 
 jobs:
-  build:
+  release:
     runs-on: windows-latest
 
     steps:
@@ -30,56 +27,23 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build
-        run: npm run build
-
-      - name: Determine tag
-        id: tag
-        shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Rename binary
+      - name: Check tag matches version.txt
         shell: pwsh
         run: |
-          $tag = "${{ steps.tag.outputs.version }}"
-          $name = "ahk-webview-template-${tag}-windows-x64.exe"
-          Rename-Item -Path "app.exe" -NewName $name
-          echo "asset_name=$name" >> $env:GITHUB_ENV
+          $version = (Get-Content version.txt -Raw).Trim()
+          if ("v$version" -ne "${{ github.ref_name }}") {
+            throw "태그(${{ github.ref_name }})와 version.txt(v$version)가 다릅니다"
+          }
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.asset_name }}
-          path: ${{ env.asset_name }}
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Determine tag
-        id: tag
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ahk-webview-template-${{ steps.tag.outputs.version }}-windows-x64.exe
+      - name: Build core.dll
+        run: npm run build:core
 
       - name: Create release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.tag.outputs.version }}
-          name: ${{ steps.tag.outputs.version }}
-          files: ahk-webview-template-${{ steps.tag.outputs.version }}-windows-x64.exe
-          generate_release_notes: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $sha = (Get-Content build/core.dll.sha256 -Raw).Trim()
+          gh release create "${{ github.ref_name }}" build/core.dll build/core.dll.sha256 build/core.version `
+            --title "${{ github.ref_name }}" `
+            --notes "core.dll ${{ github.ref_name }}`n`nSHA256: $sha"
