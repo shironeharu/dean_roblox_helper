@@ -33,11 +33,11 @@
 						setChatToggle(data.content.enabled)
 						setRegionState(data.content.regionOn, data.content.regionSet)
 						break
-					case "chatStatus":
-						setChatStatus(data.content)
-						break
 					case "imeState":
 						setImeState(data.content)
+						break
+					case "chatStatus":
+						setFooterMessage(data.content)
 						break
 					case "afkConfig":
 						setJumpKeySelect(data.content.key)
@@ -168,8 +168,13 @@
 				document.getElementById("chat-toggle").checked = !!enabled
 			}
 
-			function setChatStatus(text) {
-				document.getElementById("chat-status").textContent = text
+			var footerTimer = null
+			// 안내 문구는 창 맨 아래에 작은 글씨로만 잠깐 보여줍니다
+			function setFooterMessage(text) {
+				const el = document.getElementById("footer-message")
+				el.textContent = text
+				clearTimeout(footerTimer)
+				footerTimer = setTimeout(() => (el.textContent = ""), 5000)
 			}
 
 			function setImeState(state) {
@@ -305,6 +310,7 @@
 							<label class="text-sm text-base-content/70" for="jump-key-select">키 지정</label>
 							<select id="jump-key-select" class="select select-bordered select-sm w-full" onchange="onChangeJumpKey(this)">
 								<option value="Space">점프</option>
+								<option value="E">E</option>
 								<option value="1">1</option>
 								<option value="2">2</option>
 								<option value="3">3</option>
@@ -359,13 +365,13 @@
 					</div>
 
 					<div class="flex items-center justify-between rounded-box bg-base-300 p-3">
-						<span class="text-sm text-base-content/70">활성화</span>
+						<span class="text-sm text-base-content/70">채팅도우미 활성화</span>
 						<input id="chat-toggle" type="checkbox" class="toggle toggle-primary" onchange="onToggleChat(this)" />
 					</div>
 
 					<div class="flex flex-col gap-2 rounded-box bg-base-300 p-3">
 						<div class="flex items-center justify-between">
-							<span class="text-sm text-base-content/70">채팅 입력 범위</span>
+							<span class="text-sm text-base-content/70">채팅창 수동 클릭 범위지정</span>
 							<input id="region-toggle" type="checkbox" class="toggle toggle-primary" onchange="onToggleRegion(this)" />
 						</div>
 						<div class="flex items-center gap-2">
@@ -378,10 +384,6 @@
 						<div class="flex justify-between text-sm">
 							<span class="text-base-content/60">입력 상태</span>
 							<span id="ime-state" class="font-mono font-semibold">-</span>
-						</div>
-						<div class="flex justify-between text-sm">
-							<span class="text-base-content/60">상태</span>
-							<span id="chat-status" class="font-mono">대기 중</span>
 						</div>
 					</div>
 				</div>
@@ -433,6 +435,8 @@
 				</div>
 			</div>
 		</div>
+
+		<p id="footer-message" class="absolute bottom-1.5 left-0 right-0 text-center text-xs text-base-content/50 pointer-events-none z-10"></p>
 
 		<div
 			class="absolute top-0 left-0 right-0 h-7 cursor-move z-20"

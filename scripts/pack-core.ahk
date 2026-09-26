@@ -12,7 +12,11 @@
 SetWorkingDir(A_ScriptDir "\..")
 root := A_WorkingDir
 buildDir := root "\build"
-outDll := buildDir "\dean.dll"
+; 결과물을 둘 폴더는 첫 번째 인자로 바꿀 수 있습니다 (기본: build). 테스트 중인 앱이
+; build\dean.dll 을 잡고 있을 때 다른 곳에 만들어 확인하려는 용도입니다.
+outDir := A_Args.Length ? A_Args[1] : buildDir
+DirCreate(outDir)
+outDll := outDir "\dean.dll"
 RT_RCDATA := 10
 
 if !FileExist(buildDir "\app.bundle.ahk")
@@ -24,7 +28,11 @@ version := Trim(FileRead(root "\version.txt", "UTF-8"), " `t`r`n")
 if !(version ~= "^\d+(\.\d+)*$")
 	Fail("version.txt 형식이 올바르지 않습니다: " version)
 
-FileCopy(root "\vendor\AutoHotkey64.dll", outDll, true)
+try {
+	FileCopy(root "\vendor\AutoHotkey64.dll", outDll, true)
+} catch {
+	Fail(outDll " 을 덮어쓸 수 없습니다. 이 dll 을 쓰는 앱(DEAN ROBLOX)이 실행 중이면 닫고 다시 시도하세요")
+}
 
 hUpdate := DllCall("BeginUpdateResourceW", "str", outDll, "int", false, "ptr")
 if !hUpdate
@@ -64,8 +72,8 @@ if (!check || StrGet(check, check.Size, "UTF-8") != version)
 	Fail("dean.dll 검증 실패: 버전 리소스가 다릅니다")
 
 hash := Sha256File(outDll)
-FileOpen(buildDir "\dean.dll.sha256", "w").Write(hash "  dean.dll`n")
-FileOpen(buildDir "\dean.version", "w").Write(version)
+FileOpen(outDir "\dean.dll.sha256", "w").Write(hash "  dean.dll`n")
+FileOpen(outDir "\dean.version", "w").Write(version)
 FileAppend("dean.dll v" version " 생성 (" Round(FileGetSize(outDll) / 1024) " KB, 화면 파일 " files.Length "개)`nSHA256 " hash "`n", "*", "UTF-8")
 ExitApp(0)
 

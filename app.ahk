@@ -307,9 +307,14 @@ SendChatState() {
 }
 
 WebviewSetChatEnabled(webview, enabled, *) {
-	global chatEnabled, ConfigFile
+	global chatEnabled, ConfigFile, lastImeShown
 
 	chatEnabled := (enabled = 1 || enabled = "1" || enabled = "true")
+	if (!chatEnabled) {
+		; 꺼져 있을 때는 예전 입력 상태가 남아 있지 않게 비움
+		lastImeShown := -1
+		MyGui.PostWebMessageAsJson('{"type":"imeState","content":"unknown"}')
+	}
 	ApplyChatEnabled(chatEnabled)
 	IniWrite(chatEnabled ? "1" : "0", ConfigFile, "Chat", "Enabled")
 	UpdateChatStatus(chatEnabled ? "대기 중" : "비활성화됨")
@@ -476,7 +481,7 @@ PickChatRegion() {
 	try {
 		shade.Show("NoActivate x" cx " y" cy " w" cw " h" ch)
 		WinSetTransparent(90, shade)
-		ToolTip("채팅 입력창 범위를 드래그하세요 (ESC 취소)", cx + 12, cy + 12)
+		UpdateChatStatus("채팅창 클릭 범위를 드래그하세요 (ESC 취소)")
 		KeyWait("LButton")
 		Loop {
 			if GetKeyState("Escape") {
@@ -507,7 +512,6 @@ PickChatRegion() {
 			}
 		}
 	} finally {
-		ToolTip()
 		shade.Destroy()
 		box.Destroy()
 		picking := false
@@ -672,9 +676,8 @@ SetClickOn(which, on) {
 	}
 
 	SendClickState()
-	; 게임 화면에서도 상태를 알 수 있도록 잠깐 표시
-	ToolTip(label (on ? " ON" : " OFF"))
-	SetTimer(() => ToolTip(), -1000)
+	; 창 맨 아래 안내 문구로 표시
+	UpdateChatStatus(label (on ? " ON" : " OFF"))
 }
 
 HoldClickLeft(*) {
