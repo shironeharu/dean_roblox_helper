@@ -31,6 +31,7 @@
 						break
 					case "chatState":
 						setChatToggle(data.content.enabled)
+						setRegionState(data.content.regionOn, data.content.regionSet)
 						break
 					case "chatStatus":
 						setChatStatus(data.content)
@@ -174,6 +175,17 @@
 			function setImeState(state) {
 				const labels = { korean: "한글", english: "영어", unknown: "-" }
 				document.getElementById("ime-state").textContent = labels[state] || "-"
+			}
+
+			function setRegionState(on, isSet) {
+				document.getElementById("region-toggle").checked = !!on
+				const badge = document.getElementById("region-badge")
+				badge.textContent = isSet ? "지정됨" : "미지정"
+				badge.className = "badge badge-sm " + (isSet ? "badge-success" : "badge-neutral")
+			}
+
+			function onToggleRegion(checkbox) {
+				ahk.SetChatRegionEnabled(checkbox.checked)
 			}
 
 			function onToggleChat(checkbox) {
@@ -334,13 +346,13 @@
 			<div id="view-chat" class="card w-80 bg-base-100/40 backdrop-blur-xl border border-white/10 shadow-2xl hidden">
 				<div class="card-body gap-3 p-5">
 					<div class="flex flex-col gap-2 rounded-box bg-base-300 p-3">
-						<p class="text-xs text-base-content/60">한/영 타자 버그생겨서 빡쳐서 만듬</p>
-						<div class="divider my-0"></div>
 						<div class="grid grid-cols-[4.5rem_1fr] gap-y-2 items-center text-xs">
 							<kbd class="kbd kbd-sm justify-self-start">/</kbd>
 							<span class="text-base-content/80">채팅 열기 + 한글로 확정</span>
 							<kbd class="kbd kbd-sm justify-self-start">Enter</kbd>
 							<span class="text-base-content/80">전송 + 영어로 확정</span>
+							<kbd class="kbd kbd-sm justify-self-start">범위</kbd>
+							<span class="text-base-content/80">범위 클릭 + 한글로 확정</span>
 							<kbd class="kbd kbd-sm justify-self-start">한/영 키</kbd>
 							<span class="text-base-content/80">수동 전환 (토글)</span>
 						</div>
@@ -349,6 +361,17 @@
 					<div class="flex items-center justify-between rounded-box bg-base-300 p-3">
 						<span class="text-sm text-base-content/70">활성화</span>
 						<input id="chat-toggle" type="checkbox" class="toggle toggle-primary" onchange="onToggleChat(this)" />
+					</div>
+
+					<div class="flex flex-col gap-2 rounded-box bg-base-300 p-3">
+						<div class="flex items-center justify-between">
+							<span class="text-sm text-base-content/70">채팅 입력 범위</span>
+							<input id="region-toggle" type="checkbox" class="toggle toggle-primary" onchange="onToggleRegion(this)" />
+						</div>
+						<div class="flex items-center gap-2">
+							<button class="btn btn-primary btn-sm flex-1" onclick="ahk.PickChatRegion()">범위 지정</button>
+							<span id="region-badge" class="badge badge-neutral badge-sm">미지정</span>
+						</div>
 					</div>
 
 					<div class="flex flex-col gap-1 rounded-box bg-base-300 p-3">

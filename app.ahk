@@ -53,6 +53,18 @@ chatEnabled  := IniRead(ConfigFile, "Chat", "Enabled", "1") = "1"
 ; 어긋날 일이 없습니다. (기능을 켤 때는 영어라고 가정)
 imeIsKorean  := false
 lastImeShown := -1
+; 채팅 입력 범위: 로블록스 창(클라이언트 영역) 대비 비율(0~1)로 저장해서
+; 창 위치·크기가 달라져도 같은 자리를 가리킵니다.
+regionOn     := IniRead(ConfigFile, "Chat", "RegionEnabled", "0") = "1"
+regionL      := IniRead(ConfigFile, "Chat", "RegionL", "")
+regionT      := IniRead(ConfigFile, "Chat", "RegionT", "")
+regionR      := IniRead(ConfigFile, "Chat", "RegionR", "")
+regionB      := IniRead(ConfigFile, "Chat", "RegionB", "")
+regionSet    := IsNumber(regionL) && IsNumber(regionT) && IsNumber(regionR) && IsNumber(regionB)
+if (regionSet) {
+	regionL := Float(regionL), regionT := Float(regionT), regionR := Float(regionR), regionB := Float(regionB)
+	regionSet := (0 <= regionL && regionL < regionR && regionR <= 1 && 0 <= regionT && regionT < regionB && regionB <= 1)
+}
 ; HotIf 조건은 함수 객체의 동일성(identity)으로 구분되므로, 다시 호출할 때마다
 ; 새 람다를 만들면 이전에 등록된 변형이 실제로 꺼지지 않고 남아있게 됩니다.
 ; 그래서 조건 함수를 한 번만 만들어 재사용합니다.
@@ -78,6 +90,9 @@ regMacroKey  := ""
 holdClickMs  := 40
 ; 연타는 켜진 상태 + 로블록스 창일 때만 반응하도록 조건 함수를 한 번만 만들어 재사용
 HoldClickCond := (*) => holdOn && WinActive("ahk_exe " targetExe)
+; 좌클릭 후킹은 연타와 채팅 범위 클릭이 함께 쓰므로 같은 키에 조건이 다른 핫키를 두지 않고
+; (겹치면 하나만 동작) 하나의 조건으로 합칩니다.
+LClickCond := (*) => WinActive("ahk_exe " targetExe) && (holdOn || (chatEnabled && regionOn && regionSet))
 
 WebViewSettings := {}
 if (CoreMode) {
@@ -88,11 +103,23 @@ if (CoreMode) {
     WebViewSettings := {DllPath: WebViewCtrl.TempDir "\64bit\WebView2Loader.dll"}
 }
 
-MyGui := WebViewGui("-Resize -Caption",,, WebViewSettings)
+MyGui := WebViewGui("-Resize -Caption", "DEAN ROBLOX",, WebViewSettings)
 MyGui.OnEvent("Close", mygui_Close)
 MyGui.IsParentWindowDraggingEnabled := true
-if (CoreMode)
+if (CoreMode) {
 	MyGui.BrowseFolder(A_Args[2])   ; 화면 파일이 풀려 있는 폴더를 ahk.localhost 로 연결
+	; dll 스레드가 만든 창에는 아이콘·이름이 자동으로 붙지 않으므로, 이 프로세스를 실행한
+	; 런처 exe의 아이콘을 작업표시줄/창 아이콘으로 직접 지정합니다.
+	; Ahk2Exe 가 /icon 으로 지정한 아이콘은 exe 안의 아이콘 ID 159 자리에 들어갑니다
+	hostModule := DllCall("GetModuleHandleW", "ptr", 0, "ptr")
+	hIconBig := DllCall("LoadImageW", "ptr", hostModule, "ptr", 159, "uint", 1, "int", 32, "int", 32, "uint", 0, "ptr")
+	hIconSmall := DllCall("LoadImageW", "ptr", hostModule, "ptr", 159, "uint", 1, "int", 16, "int", 16, "uint", 0, "ptr")
+	; 창이 아직 화면에 나오기 전이라 AHK의 SendMessage(숨은 창을 못 찾음) 대신 핸들로 직접 보냄
+	if (hIconBig)
+		DllCall("SendMessageW", "ptr", MyGui.Hwnd, "uint", 0x80, "ptr", 1, "ptr", hIconBig)     ; WM_SETICON, ICON_BIG
+	if (hIconSmall)
+		DllCall("SendMessageW", "ptr", MyGui.Hwnd, "uint", 0x80, "ptr", 0, "ptr", hIconSmall)   ; WM_SETICON, ICON_SMALL
+}
 
 MyGui.AddCallbackToScript("GetWindows", WebviewGetWindows)
 MyGui.AddCallbackToScript("Start", WebviewStart)
@@ -103,6 +130,8 @@ MyGui.AddCallbackToScript("SetJumpKey", WebviewSetJumpKey)
 MyGui.AddCallbackToScript("SetJumpCount", WebviewSetJumpCount)
 MyGui.AddCallbackToScript("SetAfkInterval", WebviewSetAfkInterval)
 MyGui.AddCallbackToScript("GetChatState", WebviewGetChatState)
+MyGui.AddCallbackToScript("PickChatRegion", WebviewPickChatRegion)
+MyGui.AddCallbackToScript("SetChatRegionEnabled", WebviewSetChatRegionEnabled)
 MyGui.AddCallbackToScript("SetChatEnabled", WebviewSetChatEnabled)
 MyGui.AddCallbackToScript("GetClickConfig", WebviewGetClickConfig)
 MyGui.AddCallbackToScript("SetClickSetting", WebviewSetClickSetting)
@@ -268,9 +297,13 @@ SendStatus() {
 
 ; ---------------- 채팅 한/영 자동전환 ----------------
 WebviewGetChatState(webview, *) {
-	global chatEnabled
+	SendChatState()
+}
 
-	MyGui.PostWebMessageAsJson('{"type":"chatState","content":{"enabled":' (chatEnabled ? "true" : "false") '}}')
+SendChatState() {
+	global chatEnabled, regionOn, regionSet
+
+	MyGui.PostWebMessageAsJson('{"type":"chatState","content":{"enabled":' (chatEnabled ? "true" : "false") ',"regionOn":' (regionOn ? "true" : "false") ',"regionSet":' (regionSet ? "true" : "false") '}}')
 }
 
 WebviewSetChatEnabled(webview, enabled, *) {
@@ -391,6 +424,150 @@ UpdateChatStatus(text) {
 	MyGui.PostWebMessageAsJson('{"type":"chatStatus","content":"' JsonEscape(text) '"}')
 }
 
+; ---------------- 채팅 입력 범위 (범위를 클릭하면 한글로 전환) ----------------
+WebviewPickChatRegion(webview, *) {
+	; 화면(WebView) 콜백을 오래 붙잡지 않도록 따로 실행
+	SetTimer(PickChatRegion, -10)
+}
+
+WebviewSetChatRegionEnabled(webview, enabled, *) {
+	global regionOn, ConfigFile
+
+	regionOn := (enabled = 1 || enabled = "1" || enabled = "true")
+	IniWrite(regionOn ? "1" : "0", ConfigFile, "Chat", "RegionEnabled")
+	SendChatState()
+}
+
+; 로블록스 창 위에 어두운 막을 덮고, 마우스로 드래그한 사각형을 채팅 입력 범위로 저장합니다.
+; ESC로 취소. 저장은 창(클라이언트 영역) 대비 비율이라 창을 옮기거나 크기를 바꿔도 유지됩니다.
+PickChatRegion() {
+	global targetExe, regionL, regionT, regionR, regionB, regionSet, regionOn, ConfigFile
+	static picking := false
+
+	if (picking)
+		return
+	hwnds := WinGetList("ahk_exe " targetExe)
+	if (hwnds.Length = 0) {
+		UpdateChatStatus("로블록스 창을 찾을 수 없습니다")
+		return
+	}
+	hwnd := hwnds[1]
+	try WinActivate("ahk_id " hwnd)
+	try WinWaitActive("ahk_id " hwnd, , 1)
+	try {
+		WinGetClientPos(&cx, &cy, &cw, &ch, "ahk_id " hwnd)
+	} catch {
+		UpdateChatStatus("로블록스 창 정보를 읽을 수 없습니다")
+		return
+	}
+	if (cw < 100 || ch < 100) {
+		UpdateChatStatus("로블록스 창이 너무 작거나 최소화돼 있습니다")
+		return
+	}
+
+	picking := true
+	CoordMode("Mouse", "Screen")
+	shade := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x8000000")
+	shade.BackColor := "000000"
+	box := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x8000000")
+	box.BackColor := "FFC800"
+	cancelled := false
+	x := 0, y := 0, w := 0, h := 0
+	try {
+		shade.Show("NoActivate x" cx " y" cy " w" cw " h" ch)
+		WinSetTransparent(90, shade)
+		ToolTip("채팅 입력창 범위를 드래그하세요 (ESC 취소)", cx + 12, cy + 12)
+		KeyWait("LButton")
+		Loop {
+			if GetKeyState("Escape") {
+				cancelled := true
+				break
+			}
+			if GetKeyState("LButton")
+				break
+			Sleep(10)
+		}
+		if (!cancelled) {
+			MouseGetPos(&sx, &sy)
+			sx := Min(Max(sx, cx), cx + cw)
+			sy := Min(Max(sy, cy), cy + ch)
+			box.Show("NoActivate x" sx " y" sy " w1 h1")
+			WinSetTransparent(140, box)
+			while GetKeyState("LButton") {
+				if GetKeyState("Escape") {
+					cancelled := true
+					break
+				}
+				MouseGetPos(&mx, &my)
+				mx := Min(Max(mx, cx), cx + cw)
+				my := Min(Max(my, cy), cy + ch)
+				x := Min(sx, mx), y := Min(sy, my), w := Abs(mx - sx), h := Abs(my - sy)
+				box.Move(x, y, Max(w, 1), Max(h, 1))
+				Sleep(10)
+			}
+		}
+	} finally {
+		ToolTip()
+		shade.Destroy()
+		box.Destroy()
+		picking := false
+	}
+
+	if (cancelled) {
+		UpdateChatStatus("범위 지정을 취소했습니다")
+		return
+	}
+	if (w < 10 || h < 10) {
+		UpdateChatStatus("범위가 너무 작습니다")
+		return
+	}
+	regionL := Round((x - cx) / cw, 4)
+	regionT := Round((y - cy) / ch, 4)
+	regionR := Round((x + w - cx) / cw, 4)
+	regionB := Round((y + h - cy) / ch, 4)
+	regionSet := true
+	regionOn := true
+	IniWrite(regionL, ConfigFile, "Chat", "RegionL")
+	IniWrite(regionT, ConfigFile, "Chat", "RegionT")
+	IniWrite(regionR, ConfigFile, "Chat", "RegionR")
+	IniWrite(regionB, ConfigFile, "Chat", "RegionB")
+	IniWrite("1", ConfigFile, "Chat", "RegionEnabled")
+	SendChatState()
+	UpdateChatStatus("채팅 입력 범위를 저장했습니다")
+	try WinActivate("ahk_id " hwnd)
+}
+
+; 좌클릭 위치가 저장된 범위 안이면 한글로 확정합니다 (이미 한글이면 아무것도 안 함).
+; 실제 클릭은 ~ 로 그대로 통과하므로 채팅창 클릭 자체는 게임에 정상 전달됩니다.
+ChatRegionClick(mx?, my?, hwnd?) {
+	global chatEnabled, regionOn, regionSet, regionL, regionT, regionR, regionB, imeIsKorean
+
+	if (!chatEnabled || !regionOn || !regionSet)
+		return
+	; 좌표와 창은 시험할 때만 직접 넘기고, 평소(핫키)에는 현재 마우스 위치와 활성 창을 씁니다
+	if (!IsSet(mx) || !IsSet(my)) {
+		CoordMode("Mouse", "Screen")
+		MouseGetPos(&mx, &my)
+	}
+	; 클릭하는 순간 창이 사라지거나 활성 창이 없으면 조용히 무시 (오류 창이 뜨지 않도록)
+	try {
+		WinGetClientPos(&cx, &cy, &cw, &ch, IsSet(hwnd) ? "ahk_id " hwnd : "A")
+	} catch {
+		return
+	}
+	if (cw <= 0 || ch <= 0)
+		return
+	rx := (mx - cx) / cw
+	ry := (my - cy) / ch
+	if (rx < regionL || rx > regionR || ry < regionT || ry > regionB)
+		return
+	if (!IsKoreanNow()) {
+		SendEvent("{vk15}")
+		imeIsKorean := true
+	}
+	UpdateChatStatus("범위 클릭 - 한글 전환됨")
+}
+
 ; ---------------- 클릭 도우미 ----------------
 ; 프론트에서 이름/값 한 쌍으로 설정을 바꿉니다 (holdKey, macroKey, macroInterval,
 ; macroButton, holdEnabled, macroEnabled).
@@ -457,11 +634,13 @@ ApplyClickToggleKeys() {
 }
 
 SetupClickHotkeys() {
-	global HoldClickCond
+	global HoldClickCond, LClickCond
 
 	; 누르고 있는 동안 연타: 실제 클릭은 그대로 통과(~)시키고 옆에서 추가 클릭만 보냄
-	HotIf(HoldClickCond)
+	; (좌클릭은 채팅 입력 범위 클릭 감지도 같은 핫키에서 처리)
+	HotIf(LClickCond)
 	Hotkey("~LButton", HoldClickLeft, "On")
+	HotIf(HoldClickCond)
 	Hotkey("~RButton", HoldClickRight, "On")
 	HotIf()
 
@@ -499,7 +678,11 @@ SetClickOn(which, on) {
 }
 
 HoldClickLeft(*) {
-	HoldClickLoop("LButton")
+	global holdOn
+
+	ChatRegionClick()
+	if (holdOn)
+		HoldClickLoop("LButton")
 }
 
 HoldClickRight(*) {

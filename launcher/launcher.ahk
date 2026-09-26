@@ -121,8 +121,10 @@ CheckUpdate() {
 	} catch as e {
 		Log("업데이트 확인 실패: " e.Message)
 		try FileDelete(tmp)
+	} finally {
+		; 최신 버전이라 중간에 return 해도 안내 문구가 남지 않도록 finally 에서 지움
+		ToolTip()
 	}
-	ToolTip()
 }
 
 LocalVersion() {
