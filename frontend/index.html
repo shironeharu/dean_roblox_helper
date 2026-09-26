@@ -1,166 +1,426 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
 	<head>
 		<meta charset="UTF-8" />
 		<link rel="icon" type="image/svg+xml" href="assets/vite.svg" />
 		<link rel="stylesheet" href="./src/app.css" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>ahk-webview-template</title>
-		<script type="module" src="./src/main.js"></script>
-		<script type="module">
-			import { currentPageTitle } from "./src/main.js"
-			window.chrome.webview.addEventListener("message", onAhkMsg)
-			const cmdFromAhk = {
-				DragWindowMouseUp: () => {
-					currentPageTitle()
-				},
+		<title>DEAN ROBLOX</title>
+		<script>
+			let running = false
+
+			window.chrome.webview.addEventListener("message", (Msg) => {
+				const data = Msg.data
+				if (!data || typeof data !== "object" || !data.type) return
+
+				switch (data.type) {
+					case "windows":
+						renderWindowList(data.content)
+						break
+					case "started":
+						onStarted()
+						break
+					case "stopped":
+						onStopped(data.content)
+						break
+					case "status":
+						updateStatus(data.content)
+						break
+					case "error":
+						showError(data.content)
+						break
+					case "chatState":
+						setChatToggle(data.content.enabled)
+						break
+					case "chatStatus":
+						setChatStatus(data.content)
+						break
+					case "imeState":
+						setImeState(data.content)
+						break
+					case "afkConfig":
+						setJumpKeySelect(data.content.key)
+						setJumpCountInput(data.content.count)
+						document.getElementById("interval-input").value = data.content.interval
+						break
+					case "clickConfig":
+						setClickConfig(data.content)
+						break
+					case "clickState":
+						setClickState(data.content)
+						break
+					case "clickError":
+						showClickError(data.content)
+						break
+				}
+			})
+
+			function formatTime(totalSeconds) {
+				const h = Math.floor(totalSeconds / 3600)
+				const m = Math.floor((totalSeconds % 3600) / 60)
+				const s = totalSeconds % 60
+				return [h, m, s].map((n) => String(n).padStart(2, "0")).join(":")
 			}
-			function onAhkMsg(Msg) {
-				console.log(Msg)
-				if (
-					Msg.data &&
-					typeof Msg.data == "object" &&
-					Msg.data.type.length > 0
-				) {
-					switch (Msg.data.type) {
-						case "testMsg":
-							document.getElementById("ahk2web").value =
-								Msg.data.content
-							break
-						case "cmd":
-							if (cmdFromAhk[Msg.data.content])
-								cmdFromAhk[Msg.data.content]()
-							break
-					}
+
+			function renderWindowList(windows) {
+				const select = document.getElementById("window-select")
+				const prev = select.value
+				select.innerHTML = ""
+
+				if (!windows || windows.length === 0) {
+					const opt = document.createElement("option")
+					opt.textContent = "실행 중인 로블록스 창이 없습니다"
+					opt.value = ""
+					select.appendChild(opt)
+					select.disabled = true
+					document.getElementById("start-btn").disabled = true
+					return
+				}
+
+				windows.forEach((w) => {
+					const opt = document.createElement("option")
+					opt.value = w.hwnd
+					opt.textContent = w.label
+					select.appendChild(opt)
+				})
+				select.disabled = running
+				if (!running) document.getElementById("start-btn").disabled = false
+				if (windows.some((w) => String(w.hwnd) === prev)) select.value = prev
+			}
+
+			function refreshWindows() {
+				ahk.GetWindows()
+			}
+
+			function onStart() {
+				const select = document.getElementById("window-select")
+				const interval = document.getElementById("interval-input")
+				if (!select.value) return
+
+				document.getElementById("start-btn").disabled = true
+				ahk.Start(select.value, interval.value)
+			}
+
+			function onStop() {
+				ahk.Stop()
+			}
+
+			function onStarted() {
+				running = true
+				document.getElementById("start-btn").disabled = true
+				document.getElementById("stop-btn").disabled = false
+				document.getElementById("window-select").disabled = true
+				document.getElementById("interval-input").disabled = true
+				document.getElementById("jump-key-select").disabled = true
+				document.getElementById("jump-count-input").disabled = true
+				document.getElementById("refresh-btn").disabled = true
+				setState("실행 중", "badge-success")
+				document.getElementById("error-box").classList.add("hidden")
+			}
+
+			function onStopped(content) {
+				running = false
+				document.getElementById("start-btn").disabled = false
+				document.getElementById("stop-btn").disabled = true
+				document.getElementById("window-select").disabled = false
+				document.getElementById("interval-input").disabled = false
+				document.getElementById("jump-key-select").disabled = false
+				document.getElementById("jump-count-input").disabled = false
+				document.getElementById("refresh-btn").disabled = false
+				document.getElementById("elapsed-time").textContent = "00:00:00"
+				document.getElementById("next-jump").textContent = "-"
+
+				if (content && content.reason === "window_closed") {
+					setState("대기 중 (창 닫힘)", "badge-warning")
+					refreshWindows()
+				} else {
+					setState("대기 중", "badge-neutral")
 				}
 			}
-		</script>
-		<style>
-			#page-register {
-				background-image: linear-gradient(
-						to bottom,
-						var(--color-base-100) 4%,
-						rgba(255, 255, 255, 0) 60%
-					),
-					linear-gradient(
-						to top,
-						var(--color-base-100) 4%,
-						rgba(255, 255, 255, 0) 60%
-					),
-					linear-gradient(
-						to right,
-						var(--color-base-100) 3%,
-						rgba(24, 24, 24, 0) 55%
-					),
-					linear-gradient(
-						to left,
-						var(--color-base-100) 3%,
-						rgba(24, 24, 24, 0) 55%
-					),
-					url("assets/bg.webp");
-				background-size: cover;
-				background-position: center;
-				background-repeat: no-repeat;
+
+			function updateStatus(content) {
+				document.getElementById("elapsed-time").textContent = formatTime(content.elapsed)
+				document.getElementById("next-jump").textContent = content.nextIn + "초"
 			}
-		</style>
+
+			function setState(text, badgeClass) {
+				const badge = document.getElementById("state-badge")
+				badge.textContent = text
+				badge.className = "badge " + badgeClass
+			}
+
+			function showError(message) {
+				const box = document.getElementById("error-box")
+				box.textContent = message
+				box.classList.remove("hidden")
+				document.getElementById("start-btn").disabled = false
+			}
+
+			function switchTab(tab) {
+				for (const name of ["afk", "chat", "click"]) {
+					document.getElementById("view-" + name).classList.toggle("hidden", tab !== name)
+					document.getElementById("tab-" + name).classList.toggle("tab-active", tab === name)
+				}
+			}
+
+			function setChatToggle(enabled) {
+				document.getElementById("chat-toggle").checked = !!enabled
+			}
+
+			function setChatStatus(text) {
+				document.getElementById("chat-status").textContent = text
+			}
+
+			function setImeState(state) {
+				const labels = { korean: "한글", english: "영어", unknown: "-" }
+				document.getElementById("ime-state").textContent = labels[state] || "-"
+			}
+
+			function onToggleChat(checkbox) {
+				ahk.SetChatEnabled(checkbox.checked)
+			}
+
+			function setJumpKeySelect(key) {
+				document.getElementById("jump-key-select").value = key
+			}
+
+			function onChangeJumpKey(select) {
+				ahk.SetJumpKey(select.value)
+			}
+
+			function setJumpCountInput(count) {
+				document.getElementById("jump-count-input").value = count
+			}
+
+			function onChangeJumpCount(input) {
+				ahk.SetJumpCount(input.value)
+			}
+
+			function setClickConfig(c) {
+				document.getElementById("hold-key-select").value = c.holdKey
+				document.getElementById("macro-key-select").value = c.macroKey
+				document.getElementById("macro-interval-input").value = c.interval
+				document.getElementById("macro-button-select").value = c.button
+				setClickState(c)
+			}
+
+			function setClickState(s) {
+				document.getElementById("hold-toggle").checked = !!s.holdOn
+				document.getElementById("macro-toggle").checked = !!s.macroOn
+			}
+
+			function showClickError(message) {
+				const box = document.getElementById("click-error")
+				const note = document.getElementById("click-note")
+				box.textContent = message
+				box.classList.remove("hidden")
+				note.classList.add("hidden")
+				setTimeout(() => {
+					box.classList.add("hidden")
+					note.classList.remove("hidden")
+				}, 3000)
+			}
+
+			function onChangeClickSetting(name, el) {
+				ahk.SetClickSetting(name, el.value)
+			}
+
+			function onToggleClick(name, el) {
+				ahk.SetClickSetting(name, el.checked ? "1" : "0")
+			}
+
+			window.addEventListener("DOMContentLoaded", () => {
+				document.querySelectorAll(".f-key-select").forEach((select) => {
+					for (let i = 1; i <= 12; i++) {
+						const opt = document.createElement("option")
+						opt.value = "F" + i
+						opt.textContent = "F" + i
+						select.appendChild(opt)
+					}
+				})
+				refreshWindows()
+				ahk.GetChatState()
+				ahk.GetAfkConfig()
+				ahk.GetClickConfig()
+			})
+		</script>
 	</head>
-	<body class="overflow-hidden h-screen w-screen relative select-none">
-		<div class="flex flex-col h-full w-full">
-			<div class="navbar">
-				<load src="./components/title.html" />
+	<body class="overflow-hidden h-screen w-screen relative select-none bg-base-100">
+		<div class="absolute inset-0 overflow-hidden pointer-events-none">
+			<div class="absolute -top-20 -left-16 w-56 h-56 rounded-full bg-primary/30 blur-3xl"></div>
+			<div class="absolute -bottom-20 -right-16 w-64 h-64 rounded-full bg-accent/30 blur-3xl"></div>
+		</div>
+
+		<div class="relative flex flex-col h-full w-full items-center gap-3 px-6 pb-5 pt-8">
+			<div class="flex flex-col items-center gap-1">
+				<h1 class="text-xl font-bold text-primary">DEAN ROBLOX</h1>
+				<p class="text-xs text-base-content/60 text-center">딘이 만든 로블록스 보조도구</p>
 			</div>
-			<div
-				id="pages"
-				class="flex flex-1 w-[400%] transition-transform duration-500 ease-in-out pb-16"
-			>
-				<section
-					class="w-1/4 h-full flex flex-col justify-center items-center"
-				>
-					<div
-						class="flex flex-col justify-center w-full h-full select-none"
-					>
-						<load src="./components/logos.html" />
-						<div class="flex flex-col items-center">
-							<div class="flex flex-row pt-4">
-								<load src="./components/front2ahk.html" />
-								<div class="divider divider-horizontal"></div>
-								<load src="./components/ahk2front.html" />
-							</div>
-							<div class="divider"></div>
-							<div class="flex flex-col mb-10">
-								<load src="./components/counter.html" />
-							</div>
-							<load src="./components/footer.html" />
+
+			<div role="tablist" class="tabs tabs-boxed w-80">
+				<a role="tab" id="tab-afk" class="tab tab-active" onclick="switchTab('afk')">잠수도우미</a>
+				<a role="tab" id="tab-chat" class="tab" onclick="switchTab('chat')">채팅도우미</a>
+				<a role="tab" id="tab-click" class="tab" onclick="switchTab('click')">클릭도우미</a>
+			</div>
+
+			<div id="view-afk" class="card w-80 bg-base-100/40 backdrop-blur-xl border border-white/10 shadow-2xl">
+				<div class="card-body gap-3 p-5">
+					<div class="flex items-center justify-between">
+						<span class="text-sm text-base-content/70">상태</span>
+						<span id="state-badge" class="badge badge-neutral">대기 중</span>
+					</div>
+
+					<div class="flex flex-col gap-1">
+						<label class="text-sm text-base-content/70" for="window-select">대상 로블록스 창</label>
+						<div class="flex gap-2">
+							<select id="window-select" class="select select-bordered select-sm flex-1"></select>
+							<button id="refresh-btn" class="btn btn-square btn-sm" onclick="refreshWindows()" title="새로고침">
+									<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4">
+										<path d="M21 12a9 9 0 1 1-2.64-6.36" />
+										<path d="M21 3v6h-6" />
+									</svg>
+								</button>
 						</div>
 					</div>
-				</section>
-				<section
-					id="page-register"
-					class="w-1/4 h-full flex flex-row justify-center items-center gap-4 px-8"
-				>
-					<load src="./components/register.html" />
-				</section>
-				<section
-					class="w-1/4 h-full flex flex-col justify-center items-center gap-4 px-8 py-4 overflow-y-auto"
-				>
-					<div class="flex flex-row gap-4 w-full">
-						<load src="./components/toggle.html" />
-						<load src="./components/range.html" />
-						<load src="./components/progress.html" />
+
+					<div class="flex gap-2">
+						<div class="flex flex-col gap-1 flex-1">
+							<label class="text-sm text-base-content/70" for="interval-input">간격 (초)</label>
+							<input id="interval-input" type="number" min="5" value="60" class="input input-bordered input-sm w-full" onchange="ahk.SetAfkInterval(this.value)" />
+						</div>
+
+						<div class="flex flex-col gap-1 flex-1">
+							<label class="text-sm text-base-content/70" for="jump-key-select">키 지정</label>
+							<select id="jump-key-select" class="select select-bordered select-sm w-full" onchange="onChangeJumpKey(this)">
+								<option value="Space">점프</option>
+								<option value="1">1</option>
+								<option value="2">2</option>
+								<option value="3">3</option>
+								<option value="4">4</option>
+								<option value="5">5</option>
+								<option value="6">6</option>
+								<option value="7">7</option>
+								<option value="8">8</option>
+								<option value="9">9</option>
+							</select>
+						</div>
+
+						<div class="flex flex-col gap-1 flex-1">
+							<label class="text-sm text-base-content/70" for="jump-count-input">횟수</label>
+							<input id="jump-count-input" type="number" min="1" max="20" value="1" class="input input-bordered input-sm w-full" onchange="onChangeJumpCount(this)" />
+						</div>
 					</div>
-					<div class="flex flex-row gap-4 w-full">
-						<load src="./components/select.html" />
-						<load src="./components/stepper.html" />
-						<load src="./components/rating.html" />
+
+					<div class="flex flex-col gap-1 rounded-box bg-base-300 p-3">
+						<div class="flex justify-between text-sm">
+							<span class="text-base-content/60">경과 시간</span>
+							<span id="elapsed-time" class="font-mono font-semibold">00:00:00</span>
+						</div>
+						<div class="flex justify-between text-sm">
+							<span class="text-base-content/60">다음 잠수방지 실행</span>
+							<span id="next-jump" class="font-mono font-semibold">-</span>
+						</div>
 					</div>
-					<div class="flex flex-row gap-4 w-full">
-						<load src="./components/btnGroup.html" />
-						<load src="./components/volumes.html" />
-						<load src="./components/checkbox.html" />
+
+					<div id="error-box" class="alert alert-error text-sm py-2 hidden"></div>
+
+					<div class="flex gap-3">
+						<button id="start-btn" class="btn btn-primary flex-1" onclick="onStart()" disabled>시작</button>
+						<button id="stop-btn" class="btn btn-error flex-1" onclick="onStop()" disabled>정지</button>
 					</div>
-				</section>
-				<section
-					class="flex flex-col w-1/4 h-full justify-center items-center gap-4 px-8"
-				>
-					<div class="flex flex-row gap-4">
-						<load src="./components/score.html" />
-						<load src="./components/score2.html" />
-					</div>
-					<div class="flex flex-row gap-4 justify-center">
-						<load src="./components/post.html" />
-						<load src="./components/chart.html" />
-					</div>
-				</section>
+				</div>
 			</div>
-			<div class="dock border-0">
-				<div id="pagination" class="flex flex-row gap-4">
-					<input
-						type="radio"
-						name="pagination-main"
-						value="0"
-						class="radio radio-xs border-0 bg-white/15 checked:bg-white transition-translate duration-300"
-						checked="checked"
-					/>
-					<input
-						type="radio"
-						name="pagination-main"
-						value="1"
-						class="radio radio-xs border-0 bg-white/15 checked:bg-white transition-translate duration-300"
-					/>
-					<input
-						type="radio"
-						name="pagination-main"
-						value="2"
-						class="radio radio-xs border-0 bg-white/15 checked:bg-white transition-translate duration-300"
-					/>
-					<input
-						type="radio"
-						name="pagination-main"
-						value="3"
-						class="radio radio-xs border-0 bg-white/15 checked:bg-white transition-translate duration-300"
-					/>
+
+			<div id="view-chat" class="card w-80 bg-base-100/40 backdrop-blur-xl border border-white/10 shadow-2xl hidden">
+				<div class="card-body gap-3 p-5">
+					<div class="flex flex-col gap-2 rounded-box bg-base-300 p-3">
+						<p class="text-xs text-base-content/60">한/영 타자 버그생겨서 빡쳐서 만듬</p>
+						<div class="divider my-0"></div>
+						<div class="grid grid-cols-[4.5rem_1fr] gap-y-2 items-center text-xs">
+							<kbd class="kbd kbd-sm justify-self-start">/</kbd>
+							<span class="text-base-content/80">채팅 열기 + 한글로 확정</span>
+							<kbd class="kbd kbd-sm justify-self-start">Enter</kbd>
+							<span class="text-base-content/80">전송 + 영어로 확정</span>
+							<kbd class="kbd kbd-sm justify-self-start">한/영 키</kbd>
+							<span class="text-base-content/80">수동 전환 (토글)</span>
+						</div>
+					</div>
+
+					<div class="flex items-center justify-between rounded-box bg-base-300 p-3">
+						<span class="text-sm text-base-content/70">활성화</span>
+						<input id="chat-toggle" type="checkbox" class="toggle toggle-primary" onchange="onToggleChat(this)" />
+					</div>
+
+					<div class="flex flex-col gap-1 rounded-box bg-base-300 p-3">
+						<div class="flex justify-between text-sm">
+							<span class="text-base-content/60">입력 상태</span>
+							<span id="ime-state" class="font-mono font-semibold">-</span>
+						</div>
+						<div class="flex justify-between text-sm">
+							<span class="text-base-content/60">상태</span>
+							<span id="chat-status" class="font-mono">대기 중</span>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div id="view-click" class="card w-80 bg-base-100/40 backdrop-blur-xl border border-white/10 shadow-2xl hidden">
+				<div class="card-body gap-3 p-5">
+					<div class="flex flex-col gap-2 rounded-box bg-base-300 p-3">
+						<div class="flex items-center justify-between">
+							<span class="text-sm font-semibold">연타</span>
+							<input id="hold-toggle" type="checkbox" class="toggle toggle-primary" onchange="onToggleClick('holdEnabled', this)" />
+						</div>
+						<p class="text-xs text-base-content/60">좌 · 우 클릭을 누르고 있는 동안 클릭합니다</p>
+						<div class="divider my-0"></div>
+						<div class="flex items-center justify-between gap-2">
+							<label class="text-xs text-base-content/70" for="hold-key-select">온오프 키</label>
+							<select id="hold-key-select" class="f-key-select select select-bordered select-sm w-28" onchange="onChangeClickSetting('holdKey', this)"></select>
+						</div>
+					</div>
+
+					<div class="flex flex-col gap-2 rounded-box bg-base-300 p-3">
+						<div class="flex items-center justify-between">
+							<span class="text-sm font-semibold">클릭 매크로</span>
+							<input id="macro-toggle" type="checkbox" class="toggle toggle-primary" onchange="onToggleClick('macroEnabled', this)" />
+						</div>
+						<p class="text-xs text-base-content/60">정해진 간격마다 자동으로 클릭합니다</p>
+						<div class="divider my-0"></div>
+						<div class="flex gap-2">
+							<div class="flex flex-col gap-1 flex-1">
+								<label class="text-xs text-base-content/70" for="macro-key-select">온오프 키</label>
+								<select id="macro-key-select" class="f-key-select select select-bordered select-sm w-full" onchange="onChangeClickSetting('macroKey', this)"></select>
+							</div>
+							<div class="flex flex-col gap-1 flex-1">
+								<label class="text-xs text-base-content/70" for="macro-interval-input">간격 (초)</label>
+								<input id="macro-interval-input" type="number" min="0.05" step="0.1" value="1" class="input input-bordered input-sm w-full" onchange="onChangeClickSetting('macroInterval', this)" />
+							</div>
+							<div class="flex flex-col gap-1 flex-1">
+								<label class="text-xs text-base-content/70" for="macro-button-select">클릭</label>
+								<select id="macro-button-select" class="select select-bordered select-sm w-full" onchange="onChangeClickSetting('macroButton', this)">
+									<option value="LButton">좌클릭</option>
+									<option value="RButton">우클릭</option>
+								</select>
+							</div>
+						</div>
+					</div>
+
+					<div id="click-error" class="alert alert-error text-xs py-1.5 hidden"></div>
+					<p id="click-note" class="text-xs text-base-content/50 text-center">로블록스 창이 활성화됐을 때만 동작합니다</p>
 				</div>
 			</div>
 		</div>
+
+		<div
+			class="absolute top-0 left-0 right-0 h-7 cursor-move z-20"
+			onmousedown="ahk.DragParentWindow()"
+			title="드래그해서 이동"
+		></div>
+
+		<button
+			onclick="ahk.Exit('')"
+			class="btn btn-square btn-sm btn-ghost absolute top-1.5 right-1.5 z-30"
+			title="닫기"
+		>✕</button>
 	</body>
 </html>

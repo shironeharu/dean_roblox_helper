@@ -6,6 +6,9 @@ resource.ahk
 .vscode
 dist/
 *.ini
+setting.dean
+setting.milky
+*.zip
 .kilo
 
 # Windows image file caches
