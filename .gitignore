@@ -52,3 +52,4 @@ dist-ssr
 *.sln
 *.sw?
 build/
+release/

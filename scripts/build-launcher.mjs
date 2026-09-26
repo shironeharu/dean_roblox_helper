@@ -8,7 +8,8 @@ import { fileURLToPath } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const bin = path.join(root, "node_modules", "ahk64", "bin")
-const out = path.join(root, "build", "DEAN ROBLOX.exe")
+// 출력 파일 이름은 첫 번째 인자로 바꿀 수 있습니다: node scripts/build-launcher.mjs "DEAN ROBLOX v1.2.exe"
+const out = path.join(root, "build", process.argv[2] || "DEAN ROBLOX.exe")
 fs.mkdirSync(path.dirname(out), { recursive: true })
 
 const result = spawnSync(

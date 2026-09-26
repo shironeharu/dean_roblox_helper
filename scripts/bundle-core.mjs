@@ -1,5 +1,5 @@
 // app.ahk 와 #Include 된 파일들을 하나의 스크립트 텍스트로 합칩니다.
-// core.dll 안에는 스크립트가 파일이 아니라 텍스트로 들어가서 NewThread()로 실행되므로
+// dean.dll 안에는 스크립트가 파일이 아니라 텍스트로 들어가서 NewThread()로 실행되므로
 // #Include 를 미리 펼쳐 둬야 합니다.
 //
 // 사용법: node scripts/bundle-core.mjs <입력 app.ahk> <출력 파일>

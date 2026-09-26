@@ -1,7 +1,7 @@
-name: Release core.dll
+name: Release dean.dll
 
-# 태그(v1.02 처럼 version.txt 와 같은 값)를 push 하면 core.dll 을 빌드해서 릴리스로 올립니다.
-# 런처(exe)는 이 릴리스의 core.version / core.dll.sha256 / core.dll 을 받아서 업데이트합니다.
+# 태그(v1.02 처럼 version.txt 와 같은 값)를 push 하면 dean.dll 을 빌드해서 릴리스로 올립니다.
+# 런처(exe)는 이 릴리스의 dean.version / dean.dll.sha256 / dean.dll 을 받아서 업데이트합니다.
 on:
   push:
     tags:
@@ -35,7 +35,7 @@ jobs:
             throw "태그(${{ github.ref_name }})와 version.txt(v$version)가 다릅니다"
           }
 
-      - name: Build core.dll
+      - name: Build dean.dll
         run: npm run build:core
 
       - name: Create release
@@ -43,7 +43,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $sha = (Get-Content build/core.dll.sha256 -Raw).Trim()
-          gh release create "${{ github.ref_name }}" build/core.dll build/core.dll.sha256 build/core.version `
+          $sha = (Get-Content build/dean.dll.sha256 -Raw).Trim()
+          gh release create "${{ github.ref_name }}" build/dean.dll build/dean.dll.sha256 build/dean.version `
             --title "${{ github.ref_name }}" `
-            --notes "core.dll ${{ github.ref_name }}`n`nSHA256: $sha"
+            --notes "dean.dll ${{ github.ref_name }}`n`nSHA256: $sha"

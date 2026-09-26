@@ -9,7 +9,7 @@
 
 ; ---------------- 실행 모드 ----------------
 ; 개발: `npm run dev` (Vite 서버 화면). 컴파일: 예전 방식의 단일 exe.
-; 코어: 런처(exe)가 core.dll 안의 이 스크립트를 스레드로 실행합니다. 런처가
+; 코어: 런처(exe)가 dean.dll 안의 이 스크립트를 스레드로 실행합니다. 런처가
 ; 인자로 "--core 화면폴더 WebView2Loader경로 설정폴더"를 넘깁니다.
 CoreMode := (A_Args.Length >= 4 && A_Args[1] = "--core")
 if (CoreMode) {

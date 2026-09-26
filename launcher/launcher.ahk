@@ -2,37 +2,37 @@
 ;@Ahk2Exe-SetName 딘 로블록스 도우미
 ;@Ahk2Exe-SetProductName 딘 로블록스 도우미
 ;@Ahk2Exe-SetDescription 로블록스의 불편함 보조도구
-;@Ahk2Exe-SetVersion 1.0.2.0
+;@Ahk2Exe-SetVersion 1.2.0.0
 ;@Ahk2Exe-SetCompanyName Roblox_DEAN
 ;@Ahk2Exe-SetCopyright Roblox_DEAN
 #SingleInstance Force
 SetWorkingDir(A_ScriptDir)
 
-; 런처: 같은 폴더의 core.dll(화면 + 기능)을 실행하고, 시작할 때 GitHub 릴리스의
-; 버전과 다르면(더 높으면) 새 core.dll을 받아 교체합니다.
-; 업데이트 실패(오프라인, 해시 불일치 등)는 조용히 무시하고 기존 core.dll로 실행합니다.
+; 런처: 같은 폴더의 dean.dll(화면 + 기능)을 실행하고, 시작할 때 GitHub 릴리스의
+; 버전과 다르면(더 높으면) 새 dean.dll을 받아 교체합니다.
+; 업데이트 실패(오프라인, 해시 불일치 등)는 조용히 무시하고 기존 dean.dll로 실행합니다.
 
 UPDATE_BASE := "https://github.com/shironeharu/dean_roblox_helper/releases/latest/download/"
-CoreDll     := A_ScriptDir "\core.dll"
+CoreDll     := A_ScriptDir "\dean.dll"
 LogFile     := A_ScriptDir "\launcher.log"
 APP_TITLE   := "딘 로블록스 도우미"
 
 CheckUpdate()
 
 if !FileExist(CoreDll) {
-	MsgBox("core.dll 을 찾을 수 없고 받아오지도 못했습니다.`n인터넷 연결을 확인하거나 core.dll 을 이 폴더에 넣어주세요.", APP_TITLE, "Iconx")
+	MsgBox("dean.dll 을 찾을 수 없고 받아오지도 못했습니다.`n인터넷 연결을 확인하거나 dean.dll 을 이 폴더에 넣어주세요.", APP_TITLE, "Iconx")
 	ExitApp(1)
 }
 
 hMod := DllCall("LoadLibraryW", "str", CoreDll, "ptr")
 if !hMod {
-	MsgBox("core.dll 을 불러올 수 없습니다 (오류 " A_LastError ").`n파일이 손상됐을 수 있습니다. 삭제 후 다시 실행하면 새로 받아옵니다.", APP_TITLE, "Iconx")
+	MsgBox("dean.dll 을 불러올 수 없습니다 (오류 " A_LastError ").`n파일이 손상됐을 수 있습니다. 삭제 후 다시 실행하면 새로 받아옵니다.", APP_TITLE, "Iconx")
 	ExitApp(1)
 }
 version := ResourceText(hMod, "APP_VERSION")
 script := ResourceText(hMod, "APP_SCRIPT")
 if (!version || !script) {
-	MsgBox("core.dll 이 올바른 형식이 아닙니다.", APP_TITLE, "Iconx")
+	MsgBox("dean.dll 이 올바른 형식이 아닙니다.", APP_TITLE, "Iconx")
 	ExitApp(1)
 }
 
@@ -72,7 +72,7 @@ CheckUpdate() {
 	try {
 		current := LocalVersion()
 		ToolTip(APP_TITLE " - 업데이트 확인 중...")
-		remote := Trim(BufText(HttpGet(UPDATE_BASE "core.version", 5000)), " `t`r`n")
+		remote := Trim(BufText(HttpGet(UPDATE_BASE "dean.version", 5000)), " `t`r`n")
 		if !(remote ~= "^\d+(\.\d+)*$") {
 			Log("원격 버전 형식 오류: " remote)
 			return
@@ -82,17 +82,17 @@ CheckUpdate() {
 
 		ToolTip(APP_TITLE " - v" remote " 업데이트 받는 중...")
 		expected := ""
-		if RegExMatch(BufText(HttpGet(UPDATE_BASE "core.dll.sha256", 8000)), "i)\b([0-9a-f]{64})\b", &m)
+		if RegExMatch(BufText(HttpGet(UPDATE_BASE "dean.dll.sha256", 8000)), "i)\b([0-9a-f]{64})\b", &m)
 			expected := StrLower(m[1])
 		if !expected {
 			Log("해시 파일을 읽을 수 없어 업데이트를 건너뜁니다")
 			return
 		}
 
-		data := HttpGet(UPDATE_BASE "core.dll", 120000)
-		; 정상적인 core.dll 인지 최소한의 확인: 크기, 실행 파일 헤더(MZ)
+		data := HttpGet(UPDATE_BASE "dean.dll", 120000)
+		; 정상적인 dean.dll 인지 최소한의 확인: 크기, 실행 파일 헤더(MZ)
 		if (data.Size < 1000000 || NumGet(data, 0, "UShort") != 0x5A4D) {
-			Log("받은 파일이 core.dll 형식이 아닙니다 (" data.Size " bytes)")
+			Log("받은 파일이 dean.dll 형식이 아닙니다 (" data.Size " bytes)")
 			return
 		}
 		f := FileOpen(tmp, "w")
@@ -174,7 +174,7 @@ Sha256File(path) {
 	throw Error("해시 계산 실패")
 }
 
-; ---------------- core.dll 리소스 ----------------
+; ---------------- dean.dll 리소스 ----------------
 ReadResource(hMod, name) {
 	res := DllCall("FindResourceW", "ptr", hMod, "str", name, "ptr", 10, "ptr")
 	if !res
@@ -197,7 +197,7 @@ BufText(buf) {
 }
 
 ; 화면 파일과 WebView2Loader.dll 을 %LocalAppData%\DEAN_ROBLOX\ui\<버전> 에 풉니다.
-; core.dll 이 바뀌지 않았으면(크기·수정 시간 동일) 다시 풀지 않습니다.
+; dean.dll 이 바뀌지 않았으면(크기·수정 시간 동일) 다시 풀지 않습니다.
 ExtractUi(hMod, version) {
 	global CoreDll
 	root := EnvGet("LOCALAPPDATA") "\DEAN_ROBLOX\ui"
