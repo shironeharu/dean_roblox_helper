@@ -38,12 +38,15 @@ jobs:
       - name: Build dean.dll
         run: npm run build:core
 
+      - name: Build launcher
+        run: npm run build:launcher
+
       - name: Create release
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $sha = (Get-Content build/dean.dll.sha256 -Raw).Trim()
-          gh release create "${{ github.ref_name }}" build/dean.dll build/dean.dll.sha256 build/dean.version `
+          gh release create "${{ github.ref_name }}" build/dean.dll build/dean.dll.sha256 build/dean.version "build/DEAN ROBLOX.exe" `
             --title "${{ github.ref_name }}" `
             --notes "dean.dll ${{ github.ref_name }}`n`nSHA256: $sha"

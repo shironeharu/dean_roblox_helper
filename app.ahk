@@ -1,17 +1,19 @@
 #Requires AutoHotkey v2.0 64-bit
 ;@Ahk2Exe-SetName 딘 로블록스 도우미
 ;@Ahk2Exe-SetProductName 딘 로블록스 도우미
-;@Ahk2Exe-SetDescription 로블록스의 불편함 보조도구
-;@Ahk2Exe-SetVersion 1.0.2.0
+;@Ahk2Exe-SetDescription DEAN ROBLOX
+;@Ahk2Exe-SetVersion 1.5.0.0
 ;@Ahk2Exe-SetCompanyName Roblox_DEAN
 ;@Ahk2Exe-SetCopyright Roblox_DEAN
 #SingleInstance force
+#Include ./require-admin.ahk
 
 ; ---------------- 실행 모드 ----------------
 ; 개발: `npm run dev` (Vite 서버 화면). 컴파일: 예전 방식의 단일 exe.
 ; 코어: 런처(exe)가 dean.dll 안의 이 스크립트를 스레드로 실행합니다. 런처가
 ; 인자로 "--core 화면폴더 WebView2Loader경로 설정폴더"를 넘깁니다.
 CoreMode := (A_Args.Length >= 4 && A_Args[1] = "--core")
+RequireAdministrator(CoreMode)
 if (CoreMode) {
 	AppDir := A_Args[4]
 	; 오류가 나면 설정 폴더에 기록 (dll 안에서는 콘솔이 없어서 원인 파악용)
@@ -25,6 +27,7 @@ OnExit(trueExit)
 SetWinDelay(-1)
 
 #Include webview\WebViewToo.ahk
+#Include ./session-unlocker.ahk
 
 ConfigFile   := AppDir "\setting.dean"
 ; 예전 이름(setting.milky)의 설정이 있으면 새 이름으로 옮겨서 값을 유지합니다.
@@ -34,7 +37,7 @@ if (FileExist(AppDir "\setting.milky") && !FileExist(ConfigFile))
 ; ---------------- 잠수 방지 매크로 상태 ----------------
 targetExe    := "RobloxPlayerBeta.exe"
 running      := false
-targetHwnd   := 0
+targetWindows := Map()
 intervalMs   := 60000
 startTick    := 0
 nextJumpTick := 0
@@ -51,7 +54,7 @@ chatEnabled  := IniRead(ConfigFile, "Chat", "Enabled", "1") = "1"
 ; 기억합니다. 한/영 키(vk15)를 누르는 모든 경로(물리 키·"/"·Enter)를 전부
 ; 우리 스크립트가 가로채서 대신 눌러주므로, 이 값만 잘 관리하면 실제 상태와
 ; 어긋날 일이 없습니다. (기능을 켤 때는 영어라고 가정)
-imeIsKorean  := false
+imeStates    := Map()
 lastImeShown := -1
 ; 채팅 입력 범위: 로블록스 창(클라이언트 영역) 대비 비율(0~1)로 저장해서
 ; 창 위치·크기가 달라져도 같은 자리를 가리킵니다.
@@ -103,23 +106,32 @@ if (CoreMode) {
     WebViewSettings := {DllPath: WebViewCtrl.TempDir "\64bit\WebView2Loader.dll"}
 }
 
+DllCall("shell32\SetCurrentProcessExplicitAppUserModelID", "wstr", "DEAN.ROBLOX.Helper", "int")
 MyGui := WebViewGui("-Resize -Caption", "DEAN ROBLOX",, WebViewSettings)
 MyGui.OnEvent("Close", mygui_Close)
 MyGui.IsParentWindowDraggingEnabled := true
-if (CoreMode) {
+if (CoreMode)
 	MyGui.BrowseFolder(A_Args[2])   ; 화면 파일이 풀려 있는 폴더를 ahk.localhost 로 연결
+if (CoreMode || A_IsCompiled) {
 	; dll 스레드가 만든 창에는 아이콘·이름이 자동으로 붙지 않으므로, 이 프로세스를 실행한
 	; 런처 exe의 아이콘을 작업표시줄/창 아이콘으로 직접 지정합니다.
 	; Ahk2Exe 가 /icon 으로 지정한 아이콘은 exe 안의 아이콘 ID 159 자리에 들어갑니다
 	hostModule := DllCall("GetModuleHandleW", "ptr", 0, "ptr")
 	hIconBig := DllCall("LoadImageW", "ptr", hostModule, "ptr", 159, "uint", 1, "int", 32, "int", 32, "uint", 0, "ptr")
 	hIconSmall := DllCall("LoadImageW", "ptr", hostModule, "ptr", 159, "uint", 1, "int", 16, "int", 16, "uint", 0, "ptr")
+} else {
+	hIconBig := DllCall("LoadImageW", "ptr", 0, "str", A_ScriptDir "\app.ico", "uint", 1, "int", 32, "int", 32, "uint", 0x10, "ptr")
+	hIconSmall := DllCall("LoadImageW", "ptr", 0, "str", A_ScriptDir "\app.ico", "uint", 1, "int", 16, "int", 16, "uint", 0x10, "ptr")
+}
+if (hIconBig || hIconSmall) {
 	; 창이 아직 화면에 나오기 전이라 AHK의 SendMessage(숨은 창을 못 찾음) 대신 핸들로 직접 보냄
 	if (hIconBig)
 		DllCall("SendMessageW", "ptr", MyGui.Hwnd, "uint", 0x80, "ptr", 1, "ptr", hIconBig)     ; WM_SETICON, ICON_BIG
 	if (hIconSmall)
 		DllCall("SendMessageW", "ptr", MyGui.Hwnd, "uint", 0x80, "ptr", 0, "ptr", hIconSmall)   ; WM_SETICON, ICON_SMALL
+	TraySetIcon("HICON:" (hIconBig ? hIconBig : hIconSmall))
 }
+A_IconTip := "DEAN ROBLOX"
 
 MyGui.AddCallbackToScript("GetWindows", WebviewGetWindows)
 MyGui.AddCallbackToScript("Start", WebviewStart)
@@ -135,6 +147,10 @@ MyGui.AddCallbackToScript("SetChatRegionEnabled", WebviewSetChatRegionEnabled)
 MyGui.AddCallbackToScript("SetChatEnabled", WebviewSetChatEnabled)
 MyGui.AddCallbackToScript("GetClickConfig", WebviewGetClickConfig)
 MyGui.AddCallbackToScript("SetClickSetting", WebviewSetClickSetting)
+MyGui.AddCallbackToScript("GetMultiState", WebviewGetMultiState)
+MyGui.AddCallbackToScript("LaunchMulti", WebviewLaunchMulti)
+MyGui.AddCallbackToScript("PickMultiPath", WebviewPickMultiPath)
+MyGui.AddCallbackToScript("FocusRoblox", WebviewFocusRoblox)
 
 if (A_IsCompiled || CoreMode) {
 	MyGui.Navigate("index.html")
@@ -143,7 +159,7 @@ if (A_IsCompiled || CoreMode) {
 	MyGui.Debug()
 }
 
-MyGui.Show("w440 h560")
+MyGui.Show("w380 h536")
 ApplyChatEnabled(chatEnabled)
 SetupClickHotkeys()
 SetTimer(PollImeState, 400)
@@ -158,7 +174,7 @@ WebviewGetWindows(webview, *) {
 		title := WinGetTitle("ahk_id " hwnd)
 		pid := WinGetPID("ahk_id " hwnd)
 		label := JsonEscape((title ? title : "Roblox") " (PID " pid ")")
-		parts.Push('{"hwnd":' hwnd ',"label":"' label '"}')
+		parts.Push('{"hwnd":' hwnd ',"pid":' pid ',"label":"' label '"}')
 	}
 
 	MyGui.PostWebMessageAsJson('{"type":"windows","content":[' JoinArr(parts, ",") ']}')
@@ -201,11 +217,21 @@ WebviewSetJumpCount(webview, count, *) {
 }
 
 ; ---------------- 시작 ----------------
-WebviewStart(webview, hwnd, interval, *) {
-	global running, targetHwnd, intervalMs, startTick, nextJumpTick
+WebviewStart(webview, hwndList, interval, *) {
+	global running, targetWindows, intervalMs, startTick, nextJumpTick, afkSec, ConfigFile
 
-	if !WinExist("ahk_id " hwnd) {
-		MyGui.PostWebMessageAsJson('{"type":"error","content":"선택한 로블록스 창을 찾을 수 없습니다"}')
+	selected := Map()
+	for value in StrSplit(hwndList, ",") {
+		if !IsInteger(value)
+			continue
+		hwnd := Integer(value)
+		try {
+			if WinGetProcessName("ahk_id " hwnd) = "RobloxPlayerBeta.exe"
+				selected[hwnd] := WinGetPID("ahk_id " hwnd)
+		}
+	}
+	if !selected.Count {
+		MyGui.PostWebMessageAsJson('{"type":"error","content":"실행 중인 로블록스 창을 하나 이상 선택해 주세요"}')
 		return
 	}
 
@@ -215,7 +241,7 @@ WebviewStart(webview, hwnd, interval, *) {
 	afkSec := sec
 	IniWrite(sec, ConfigFile, "Afk", "Interval")
 
-	targetHwnd := hwnd
+	targetWindows := selected
 	intervalMs := sec * 1000
 	running := true
 	startTick := A_TickCount
@@ -244,38 +270,53 @@ WebviewExit(webview, *) {
 
 ; ---------------- 점프 입력 (잠깐만 전환 후 이전 창으로 복귀) ----------------
 DoJump() {
-	global running, targetHwnd, intervalMs, nextJumpTick, jumpKey, jumpCount, holdMs
+	global running, targetWindows, intervalMs, nextJumpTick, jumpKey, jumpCount, holdMs
+	static busy := false
 
-	if !running
+	if !running || busy
 		return
-
-	if !WinExist("ahk_id " targetHwnd) {
+	busy := true
+	prevHwnd := WinExist("A")
+	try {
+		for hwnd, pid in targetWindows.Clone() {
+			if !running
+				break
+			try {
+				if WinGetPID("ahk_id " hwnd) != pid || WinGetProcessName("ahk_id " hwnd) != "RobloxPlayerBeta.exe" {
+					targetWindows.Delete(hwnd)
+					continue
+				}
+			} catch {
+				targetWindows.Delete(hwnd)
+				continue
+			}
+			try {
+				WinActivate("ahk_id " hwnd)
+				if !WinWaitActive("ahk_id " hwnd, , 1)
+					continue
+				Loop jumpCount {
+					if !running || !WinActive("ahk_id " hwnd)
+						break
+					SendEvent("{" jumpKey " down}")
+					Sleep(holdMs)
+					SendEvent("{" jumpKey " up}")
+					if A_Index < jumpCount
+						Sleep(100)
+				}
+			}
+		}
+	} finally {
+		if prevHwnd && WinExist("ahk_id " prevHwnd)
+			try WinActivate("ahk_id " prevHwnd)
+		busy := false
+	}
+	if !targetWindows.Count {
 		running := false
 		SetTimer(DoJump, 0)
 		SetTimer(SendStatus, 0)
 		MyGui.PostWebMessageAsJson('{"type":"stopped","content":{"reason":"window_closed"}}')
 		return
 	}
-
-	alreadyActive := WinActive("ahk_id " targetHwnd)
-	prevHwnd := 0
-
-	if !alreadyActive {
-		prevHwnd := WinExist("A")
-		WinActivate("ahk_id " targetHwnd)
-		WinWaitActive("ahk_id " targetHwnd, , 1)
-	}
-
-	Loop jumpCount {
-		SendEvent("{" jumpKey " down}")
-		Sleep(holdMs)
-		SendEvent("{" jumpKey " up}")
-		if (A_Index < jumpCount)
-			Sleep(100)
-	}
-
-	if !alreadyActive && prevHwnd && prevHwnd != targetHwnd && WinExist("ahk_id " prevHwnd)
-		WinActivate("ahk_id " prevHwnd)
 
 	nextJumpTick := A_TickCount + intervalMs
 }
@@ -325,9 +366,9 @@ WebviewSetChatEnabled(webview, enabled, *) {
 ; 하드웨어 키 입력 그대로는 로블록스에서 막히는 경우가 있어, 잠수 방지 매크로의
 ; DoJump와 동일하게 SendEvent로 재전송해야 실제로 통합니다).
 ApplyChatEnabled(enabled) {
-	global RobloxActiveCond, imeIsKorean
+	global RobloxActiveCond, imeStates
 
-	imeIsKorean := false
+	imeStates.Clear()
 	HotIf(RobloxActiveCond)
 
 	if (enabled) {
@@ -362,34 +403,40 @@ GetHangulMode() {
 ; 실제 상태를 읽을 수 있으면 그 값으로 우리가 기억하는 값을 바로잡고, 읽을 수
 ; 없을 때만 기억해둔 값을 씁니다. (시작할 때 이미 한글이었던 경우도 여기서 맞춰짐)
 IsKoreanNow() {
-	global imeIsKorean
+	global imeStates
 
+	hwnd := WinExist("A")
 	mode := GetHangulMode()
 	if (mode != "")
-		imeIsKorean := mode
-	return imeIsKorean
+		RememberIme(mode)
+	if imeStates.Has(hwnd) && imeStates[hwnd].pid = WinGetPID("ahk_id " hwnd)
+		return imeStates[hwnd].korean
+	return false
+}
+
+RememberIme(korean) {
+	global imeStates
+	hwnd := WinActive("ahk_exe RobloxPlayerBeta.exe")
+	if hwnd
+		imeStates[hwnd] := {pid: WinGetPID("ahk_id " hwnd), korean: korean}
 }
 
 ; 물리 한/영 키(VK_HANGUL, 0x15): 로블록스가 실제 하드웨어 키 입력은 무시해도
 ; SendEvent로 재전송하면 통과되는 경우가 많아, 그대로 다시 눌러줍니다.
 ChatToggleHangul(*) {
-	global imeIsKorean
-
 	before := IsKoreanNow()
 	SendEvent("{vk15}")
-	imeIsKorean := !before
-	UpdateChatStatus(imeIsKorean ? "한글 전환됨 (수동)" : "영어 전환됨 (수동)")
+	RememberIme(!before)
+	UpdateChatStatus(!before ? "한글 전환됨 (수동)" : "영어 전환됨 (수동)")
 }
 
 ; "/" 키: 채팅을 열고, 이미 한글이면 아무것도 안 하고 영어일 때만 한 번 토글해서
 ; 한글로 확정합니다. 여러 번 눌러도 계속 한글로만 유지됩니다.
 ChatOpenToKorean(*) {
-	global imeIsKorean
-
 	SendEvent("/")
 	if (!IsKoreanNow()) {
 		SendEvent("{vk15}")
-		imeIsKorean := true
+		RememberIme(true)
 	}
 	UpdateChatStatus("채팅 열림 - 한글 전환됨")
 }
@@ -397,14 +444,12 @@ ChatOpenToKorean(*) {
 ; Enter 키: 이미 영어면 아무것도 안 하고 한글일 때만 (채팅창이 닫히기 전에)
 ; 한 번 토글해서 영어로 확정한 뒤 전송합니다. 여러 번 눌러도 계속 영어로만 유지됩니다.
 ChatSendToEnglish(*) {
-	global imeIsKorean
-
 	if (IsKoreanNow()) {
 		; 한글 입력 중(채팅창이 열린 상태)일 때만 전송 전에 스페이스를 먼저 누릅니다.
 		; 영어 상태에서 Enter로 채팅을 열 때 스페이스가 들어가면 점프해버리기 때문입니다.
 		SendEvent("{Space}")
 		SendEvent("{vk15}")
-		imeIsKorean := false
+		RememberIme(false)
 	}
 	SendEvent("{Enter}")
 	UpdateChatStatus("전송 완료 - 영어로 전환됨")
@@ -412,16 +457,22 @@ ChatSendToEnglish(*) {
 
 ; 로블록스가 활성화돼 있는 동안 실제 한/영 상태를 화면에 보여주고, 기억값도 맞춥니다.
 PollImeState() {
-	global chatEnabled, targetExe, lastImeShown, imeIsKorean
+	global chatEnabled, targetExe, lastImeShown, imeStates
+	static lastHwnd := 0
 
 	if (!chatEnabled || !WinActive("ahk_exe " targetExe))
 		return
 	mode := GetHangulMode()
-	if (mode = lastImeShown)
+	hwnd := WinExist("A")
+	if (mode = lastImeShown && hwnd = lastHwnd)
 		return
+	lastHwnd := hwnd
 	lastImeShown := mode
 	if (mode != "")
-		imeIsKorean := mode
+		RememberIme(mode)
+	for closedHwnd in imeStates.Clone()
+		if !WinExist("ahk_id " closedHwnd)
+			imeStates.Delete(closedHwnd)
 	MyGui.PostWebMessageAsJson('{"type":"imeState","content":"' (mode = "" ? "unknown" : (mode ? "korean" : "english")) '"}')
 }
 
@@ -544,7 +595,7 @@ PickChatRegion() {
 ; 좌클릭 위치가 저장된 범위 안이면 한글로 확정합니다 (이미 한글이면 아무것도 안 함).
 ; 실제 클릭은 ~ 로 그대로 통과하므로 채팅창 클릭 자체는 게임에 정상 전달됩니다.
 ChatRegionClick(mx?, my?, hwnd?) {
-	global chatEnabled, regionOn, regionSet, regionL, regionT, regionR, regionB, imeIsKorean
+	global chatEnabled, regionOn, regionSet, regionL, regionT, regionR, regionB
 
 	if (!chatEnabled || !regionOn || !regionSet)
 		return
@@ -567,7 +618,7 @@ ChatRegionClick(mx?, my?, hwnd?) {
 		return
 	if (!IsKoreanNow()) {
 		SendEvent("{vk15}")
-		imeIsKorean := true
+		RememberIme(true)
 	}
 	UpdateChatStatus("범위 클릭 - 한글 전환됨")
 }

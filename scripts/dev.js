@@ -19,10 +19,9 @@ function startAhk() {
 	// 监控 AHK 进程退出
 	localProc.on("exit", (code, signal) => {
 		console.log(`AHK process ${localProc.pid} exited ${code} ${signal}`)
-		// 如果进程因为 ExitApp 退出，自动重启
-		// 如果进程因为 脚本 退出，不做处理
+		// F6 재시작만 처리하고, 정상 종료 및 관리자 권한 재실행은 그대로 둡니다.
 		if(localProc.pid === ahkProc.pid) {
-			if (signal !== "SIGTERM") {
+			if (signal !== "SIGTERM" && code === 5173) {
 				console.log("🔄 restarting...")
 				startAhk() // 重启 AHK 脚本
 			}

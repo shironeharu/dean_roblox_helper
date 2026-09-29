@@ -1,11 +1,13 @@
 #Requires AutoHotkey v2.0 64-bit
 ;@Ahk2Exe-SetName 딘 로블록스 도우미
 ;@Ahk2Exe-SetProductName 딘 로블록스 도우미
-;@Ahk2Exe-SetDescription 로블록스의 불편함 보조도구
-;@Ahk2Exe-SetVersion 1.3.0.0
+;@Ahk2Exe-SetDescription DEAN ROBLOX
+;@Ahk2Exe-SetVersion 1.5.0.0
 ;@Ahk2Exe-SetCompanyName Roblox_DEAN
 ;@Ahk2Exe-SetCopyright Roblox_DEAN
 #SingleInstance Force
+#Include ../require-admin.ahk
+RequireAdministrator()
 SetWorkingDir(A_ScriptDir)
 
 ; 런처: 같은 폴더의 dean.dll(화면 + 기능)을 실행하고, 시작할 때 GitHub 릴리스의
