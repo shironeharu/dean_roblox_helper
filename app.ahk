@@ -2,7 +2,7 @@
 ;@Ahk2Exe-SetName 딘 로블록스 도우미
 ;@Ahk2Exe-SetProductName 딘 로블록스 도우미
 ;@Ahk2Exe-SetDescription DEAN ROBLOX
-;@Ahk2Exe-SetVersion 1.7.0.0
+;@Ahk2Exe-SetVersion 1.8.0.0
 ;@Ahk2Exe-SetCompanyName Roblox_DEAN
 ;@Ahk2Exe-SetCopyright Roblox_DEAN
 #SingleInstance force
@@ -384,11 +384,11 @@ ApplyChatEnabled(enabled) {
 	HotIfWinActive("ahk_exe RobloxPlayerBeta.exe")
 
 	if (enabled) {
-		Hotkey("~$vk15", ChatToggleHangul, "On")
+		Hotkey("~$vk15 Up", ChatToggleHangul, "On")
 		Hotkey("$/", ChatOpenToKorean, "On")
 		Hotkey("$Enter", ChatSendToEnglish, "On")
 	} else {
-		for k in ["~$vk15", "$/", "$Enter"]
+		for k in ["~$vk15 Up", "$/", "$Enter"]
 			try Hotkey(k, "Off")
 	}
 
@@ -407,7 +407,7 @@ GetHangulMode() {
 	if !ime
 		return ""
 	mode := 0
-	if !DllCall("SendMessageTimeout", "ptr", ime, "uint", 0x283, "ptr", 1, "ptr", 0, "uint", 2, "uint", 300, "ptr*", &mode)
+	if !DllCall("SendMessageTimeout", "ptr", ime, "uint", 0x283, "ptr", 1, "ptr", 0, "uint", 2, "uint", 20, "ptr*", &mode)
 		return ""
 	return (mode & 1) ? 1 : 0
 }
@@ -433,12 +433,18 @@ RememberIme(korean) {
 		imeStates[hwnd] := {pid: WinGetPID("ahk_id " hwnd), korean: korean}
 }
 
-; 물리 입력을 차단하거나 합성 입력으로 대체하지 않습니다.
+; 키를 놓은 뒤 기억값만 갱신합니다. 입력 처리 중 IME 조회나 UI 호출을 하지 않습니다.
 ChatToggleHangul(*) {
-	before := IsKoreanNow()
-	RememberIme(!before)
-	UpdateChatStatus("한/영 전환 키 입력됨")
-	KeyWait("vk15")
+	global imeStates
+	hwnd := WinActive("ahk_exe RobloxPlayerBeta.exe")
+	if !hwnd
+		return
+	try {
+		pid := WinGetPID("ahk_id " hwnd)
+		if imeStates.Has(hwnd) && imeStates[hwnd].pid = pid
+			imeStates[hwnd] := {pid: pid, korean: !imeStates[hwnd].korean}
+		; 처음 보는 창은 다음 상태 타이머에서 전환 후 IME 상태를 읽습니다.
+	}
 }
 
 ; "/" 키: 채팅을 열고, 이미 한글이면 아무것도 안 하고 영어일 때만 한 번 토글해서
