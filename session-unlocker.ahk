@@ -217,6 +217,8 @@ WebviewGetMultiState(*) {
 }
 
 WebviewLaunchMulti(*) {
+	if PcRecorder.Busy
+		return
 	RobloxMulti.Launch()
 }
 
@@ -240,6 +242,32 @@ WebviewPickMultiPath(*) {
 
 MultiWatch() {
 	RobloxMulti.Watch()
+}
+
+WebviewCloseRoblox(webview, value, *) {
+	if !IsInteger(value) || RobloxMulti.Busy
+		return
+	; 트레이의 전체 종료를 호출하지 않고 선택한 프로세스 핸들만 종료합니다.
+	process := DllCall("OpenProcess", "uint", 0x1001, "int", false, "uint", Integer(value), "ptr")
+	try {
+		if !process
+			throw Error("선택한 프로세스가 이미 종료됐거나 접근할 수 없습니다")
+		buf := Buffer(65536), chars := 32768
+		if !DllCall("QueryFullProcessImageNameW", "ptr", process, "uint", 0, "ptr", buf, "uint*", &chars)
+			throw Error("종료 대상의 실행 파일을 확인할 수 없습니다")
+		SplitPath(StrGet(buf, chars, "UTF-16"), &name)
+		if StrLower(name) != "robloxplayerbeta.exe"
+			throw Error("Roblox 프로세스만 종료할 수 있습니다")
+		if !DllCall("TerminateProcess", "ptr", process, "uint", 0)
+			throw Error("선택한 Roblox를 종료하지 못했습니다")
+		RobloxMulti.Message := "선택한 Roblox 종료 요청 완료 (ID:" value ")"
+	} catch as e {
+		RobloxMulti.Message := e.Message
+	} finally {
+		if process
+			DllCall("CloseHandle", "ptr", process)
+	}
+	RobloxMulti.Publish()
 }
 
 WebviewFocusRoblox(webview, value, *) {

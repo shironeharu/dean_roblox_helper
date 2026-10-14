@@ -8,12 +8,16 @@
 		<title>DEAN ROBLOX</title>
 		<script>
 			let running = false
+			let recorderBusy = false
 
 			window.chrome.webview.addEventListener("message", (Msg) => {
 				const data = Msg.data
 				if (!data || typeof data !== "object" || !data.type) return
 
 				switch (data.type) {
+					case "recorderState":
+						renderRecorderState(data.content)
+						break
 					case "windows":
 						renderWindowList(data.content)
 						break
@@ -184,11 +188,45 @@
 			}
 
 			function switchTab(tab) {
-				for (const name of ["afk", "chat", "click", "multi"]) {
+				if (recorderBusy && tab !== "record") return
+				for (const name of ["afk", "chat", "click", "multi", "record"]) {
 					document.getElementById("view-" + name).classList.toggle("hidden", tab !== name)
 					document.getElementById("tab-" + name).classList.toggle("tab-active", tab === name)
 				}
 				if (tab === "multi") ahk.GetMultiState()
+			}
+
+			function renderRecorderState(state) {
+				recorderBusy = state.mode !== "idle"
+				const labels = { idle: "대기", "record-wait": "녹화 준비", recording: "녹화 중", "play-wait": "재생 준비", playing: "재생 중", paused: "일시정지", "resume-wait": "재개 준비" }
+				document.getElementById("record-badge").textContent = labels[state.mode] || state.mode
+				document.getElementById("record-duration").textContent = state.seconds + "초"
+				document.getElementById("record-count").textContent = state.count + "개 입력"
+				document.getElementById("record-message").textContent = state.message + (state.mode === "playing" ? ` (${state.round}회차)` : "")
+				for (const id of ["record-start", "record-load", "record-repeat", "record-speed"]) document.getElementById(id).disabled = recorderBusy
+				for (const id of ["record-save"]) document.getElementById(id).disabled = recorderBusy || !state.count
+				document.getElementById("record-stop").disabled = !recorderBusy
+                const play = document.getElementById("record-play")
+                play.disabled = !state.count || (recorderBusy && !["playing", "paused"].includes(state.mode))
+                play.textContent = state.mode === "playing" ? "일시정지" : state.mode === "paused" ? "이어서 재생" : "재생"
+                for (const action of ["record", "play", "stop"]) {
+                    const select = document.getElementById("record-key-" + action)
+                    if (!select.options.length) {
+                        for (const key of [...Array.from({length: 12}, (_, i) => "F" + (i + 1)), "Insert", "Home", "PgUp", "PgDn", "Delete", "End"]) select.add(new Option(key, key))
+                    }
+                    select.value = state[action + "Key"] || {record: "F8", play: "F9", stop: "F10"}[action]
+                    select.disabled = recorderBusy
+                }
+				for (const name of ["afk", "chat", "click", "multi"]) document.getElementById("tab-" + name).classList.toggle("opacity-40", recorderBusy)
+				if (recorderBusy) switchTab("record")
+			}
+
+			function playRecording() {
+				ahk.RecordPlay(document.getElementById("record-repeat").value, document.getElementById("record-speed").value)
+			}
+
+			function changeRecordingOptions() {
+				ahk.RecordOptions(document.getElementById("record-repeat").value, document.getElementById("record-speed").value)
 			}
 
 			function renderMultiState(state) {
@@ -200,11 +238,23 @@
 				const list = document.getElementById("multi-list")
 				list.replaceChildren()
 				state.items.sort((a, b) => a.pid - b.pid).forEach((item, index) => {
+					const group = document.createElement("div")
+					group.className = "flex items-center gap-1"
 					const row = document.createElement("button")
-					row.className = "btn btn-ghost btn-sm w-full justify-start"
+					row.className = "btn btn-ghost btn-sm flex-1 min-w-0 justify-start px-1 text-xs"
 					row.textContent = `${index + 1}번 로블록스 (ID:${item.pid})`
 					row.onclick = () => ahk.FocusRoblox(String(item.pid))
-					list.appendChild(row)
+					const close = document.createElement("button")
+					close.className = "btn btn-ghost btn-xs text-error shrink-0"
+					close.textContent = "종료"
+					close.title = `이 Roblox만 강제 종료 (ID:${item.pid})`
+					close.disabled = state.busy
+					close.onclick = () => {
+						close.disabled = true
+						ahk.CloseRoblox(String(item.pid))
+					}
+					group.append(row, close)
+					list.appendChild(group)
 				})
 				if (!state.items.length) list.textContent = "실행 중인 로블록스가 없습니다"
 			}
@@ -310,6 +360,7 @@
 				ahk.GetAfkConfig()
 				ahk.GetClickConfig()
 				ahk.GetMultiState()
+				ahk.GetRecorderState()
 				setInterval(() => {
 					if (!document.getElementById("view-multi").classList.contains("hidden")) ahk.GetMultiState()
 				}, 3000)
@@ -328,11 +379,36 @@
 				<p class="text-xs text-base-content/60 text-center">딘이 만든 로블록스 보조도구</p>
 			</div>
 
-			<div role="tablist" class="tabs tabs-boxed w-80 [&_.tab]:text-xs [&_.tab]:px-1 [&_.tab]:flex-1">
-				<a role="tab" id="tab-afk" class="tab tab-active" onclick="switchTab('afk')">잠수도우미</a>
-				<a role="tab" id="tab-chat" class="tab" onclick="switchTab('chat')">채팅도우미</a>
-				<a role="tab" id="tab-click" class="tab" onclick="switchTab('click')">클릭도우미</a>
-				<a role="tab" id="tab-multi" class="tab" onclick="switchTab('multi')">멀티 실행</a>
+			<div role="tablist" class="tabs tabs-boxed w-80 [&_.tab]:text-[14px] [&_.tab]:whitespace-nowrap [&_.tab]:px-1 [&_.tab]:flex-1">
+				<a role="tab" id="tab-afk" class="tab tab-active" onclick="switchTab('afk')">잠수</a>
+				<a role="tab" id="tab-chat" class="tab" onclick="switchTab('chat')">채팅</a>
+				<a role="tab" id="tab-click" class="tab" onclick="switchTab('click')">클릭</a>
+				<a role="tab" id="tab-record" class="tab" onclick="switchTab('record')">거울</a>
+				<a role="tab" id="tab-multi" class="tab" onclick="switchTab('multi')">멀티</a>
+			</div>
+
+			<div id="view-record" class="card w-80 bg-base-100/40 backdrop-blur-xl border border-white/10 shadow-2xl hidden">
+				<div class="card-body gap-3 p-5">
+					<div class="flex justify-between items-center"><span class="text-sm font-semibold">따라하기 매크로</span><span id="record-badge" class="badge badge-neutral">대기</span></div>
+					<div class="flex justify-between rounded-box bg-base-300 p-3 text-xs"><span id="record-duration">0초</span><span id="record-count">0개 입력</span></div>
+					<div class="grid grid-cols-3 gap-2">
+						<button id="record-start" class="btn btn-sm btn-primary" onclick="ahk.Record()">녹화</button>
+						<button id="record-play" class="btn btn-sm" onclick="playRecording()" disabled>재생</button>
+						<button id="record-stop" class="btn btn-sm btn-error" onclick="ahk.RecordStop()" disabled>중단</button>
+					</div>
+					<div class="flex gap-2">
+						<label class="flex-1 text-xs">반복 (0은 무한)<input id="record-repeat" class="input input-sm w-full mt-1" type="number" min="0" max="9999" value="1" onchange="changeRecordingOptions()" /></label>
+						<label class="flex-1 text-xs">재생 속도<select id="record-speed" class="select select-sm w-full mt-1" onchange="changeRecordingOptions()"><option value="0.25">0.25배</option><option value="0.5">0.5배</option><option value="1" selected>1배</option><option value="2">2배</option><option value="4">4배</option></select></label>
+					</div>
+					<div class="flex gap-2"><button id="record-save" class="btn btn-sm flex-1" onclick="ahk.RecordSave()" disabled>저장</button><button id="record-load" class="btn btn-sm flex-1" onclick="ahk.RecordLoad()">불러오기</button></div>
+                    <div class="grid grid-cols-3 gap-2">
+                        <label class="text-xs">녹화 키<select id="record-key-record" class="select select-sm w-full mt-1" onchange="ahk.RecordKey('record', this.value)"></select></label>
+                        <label class="text-xs">재생·일시정지<select id="record-key-play" class="select select-sm w-full mt-1" onchange="ahk.RecordKey('play', this.value)"></select></label>
+                        <label class="text-xs">중단 키<select id="record-key-stop" class="select select-sm w-full mt-1" onchange="ahk.RecordKey('stop', this.value)"></select></label>
+                    </div>
+                    <p class="text-xs text-base-content/50">긴급 중단 Ctrl+Alt+Esc</p>
+					<p id="record-message" class="text-xs text-base-content/80" role="status" aria-live="polite">녹화 전 대상 창과 입력 언어를 준비해 주세요</p>
+				</div>
 			</div>
 
 			<div id="view-multi" class="card w-80 bg-base-100/40 backdrop-blur-xl border border-white/10 shadow-2xl hidden">
@@ -415,7 +491,7 @@
 
 					<div class="flex gap-3 flex-1 items-center">
 						<button id="start-btn" class="btn btn-primary flex-1" onclick="onStart()" disabled>시작</button>
-						<button id="stop-btn" class="btn btn-error flex-1" onclick="onStop()" disabled>정지</button>
+						<button id="stop-btn" class="btn btn-error flex-1" onclick="onStop()" disabled>중단</button>
 					</div>
 				</div>
 			</div>

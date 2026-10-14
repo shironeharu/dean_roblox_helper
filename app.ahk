@@ -1,8 +1,8 @@
-#Requires AutoHotkey v2.0 64-bit
+﻿#Requires AutoHotkey v2.0 64-bit
 ;@Ahk2Exe-SetName 딘 로블록스 도우미
 ;@Ahk2Exe-SetProductName 딘 로블록스 도우미
 ;@Ahk2Exe-SetDescription DEAN ROBLOX
-;@Ahk2Exe-SetVersion 1.5.0.0
+;@Ahk2Exe-SetVersion 1.6.0.0
 ;@Ahk2Exe-SetCompanyName Roblox_DEAN
 ;@Ahk2Exe-SetCopyright Roblox_DEAN
 #SingleInstance force
@@ -28,6 +28,7 @@ SetWinDelay(-1)
 
 #Include webview\WebViewToo.ahk
 #Include ./session-unlocker.ahk
+#Include ./pc-recorder.ahk
 
 ConfigFile   := AppDir "\setting.dean"
 ; 예전 이름(setting.milky)의 설정이 있으면 새 이름으로 옮겨서 값을 유지합니다.
@@ -37,6 +38,7 @@ if (FileExist(AppDir "\setting.milky") && !FileExist(ConfigFile))
 ; ---------------- 잠수 방지 매크로 상태 ----------------
 targetExe    := "RobloxPlayerBeta.exe"
 running      := false
+afkInputBusy := false
 targetWindows := Map()
 intervalMs   := 60000
 startTick    := 0
@@ -68,10 +70,6 @@ if (regionSet) {
 	regionL := Float(regionL), regionT := Float(regionT), regionR := Float(regionR), regionB := Float(regionB)
 	regionSet := (0 <= regionL && regionL < regionR && regionR <= 1 && 0 <= regionT && regionT < regionB && regionB <= 1)
 }
-; HotIf 조건은 함수 객체의 동일성(identity)으로 구분되므로, 다시 호출할 때마다
-; 새 람다를 만들면 이전에 등록된 변형이 실제로 꺼지지 않고 남아있게 됩니다.
-; 그래서 조건 함수를 한 번만 만들어 재사용합니다.
-RobloxActiveCond := (*) => WinActive("ahk_exe " targetExe)
 
 ; ---------------- 클릭 도우미 상태 ----------------
 ; 켜짐/꺼짐 상태는 안전을 위해 저장하지 않고 항상 꺼진 상태로 시작합니다.
@@ -91,11 +89,6 @@ macroOn      := false
 regHoldKey   := ""
 regMacroKey  := ""
 holdClickMs  := 40
-; 연타는 켜진 상태 + 로블록스 창일 때만 반응하도록 조건 함수를 한 번만 만들어 재사용
-HoldClickCond := (*) => holdOn && WinActive("ahk_exe " targetExe)
-; 좌클릭 후킹은 연타와 채팅 범위 클릭이 함께 쓰므로 같은 키에 조건이 다른 핫키를 두지 않고
-; (겹치면 하나만 동작) 하나의 조건으로 합칩니다.
-LClickCond := (*) => WinActive("ahk_exe " targetExe) && (holdOn || (chatEnabled && regionOn && regionSet))
 
 WebViewSettings := {}
 if (CoreMode) {
@@ -151,6 +144,15 @@ MyGui.AddCallbackToScript("GetMultiState", WebviewGetMultiState)
 MyGui.AddCallbackToScript("LaunchMulti", WebviewLaunchMulti)
 MyGui.AddCallbackToScript("PickMultiPath", WebviewPickMultiPath)
 MyGui.AddCallbackToScript("FocusRoblox", WebviewFocusRoblox)
+MyGui.AddCallbackToScript("CloseRoblox", WebviewCloseRoblox)
+MyGui.AddCallbackToScript("GetRecorderState", RecorderState)
+MyGui.AddCallbackToScript("RecordKey", WebviewRecordKey)
+MyGui.AddCallbackToScript("Record", WebviewRecord)
+MyGui.AddCallbackToScript("RecordStop", WebviewRecordStop)
+MyGui.AddCallbackToScript("RecordPlay", WebviewRecordPlay)
+MyGui.AddCallbackToScript("RecordSave", WebviewRecordSave)
+MyGui.AddCallbackToScript("RecordLoad", WebviewRecordLoad)
+MyGui.AddCallbackToScript("RecordOptions", WebviewRecordOptions)
 
 if (A_IsCompiled || CoreMode) {
 	MyGui.Navigate("index.html")
@@ -162,6 +164,7 @@ if (A_IsCompiled || CoreMode) {
 MyGui.Show("w380 h536")
 ApplyChatEnabled(chatEnabled)
 SetupClickHotkeys()
+PcRecorder.Init()
 SetTimer(PollImeState, 400)
 return
 
@@ -218,6 +221,8 @@ WebviewSetJumpCount(webview, count, *) {
 
 ; ---------------- 시작 ----------------
 WebviewStart(webview, hwndList, interval, *) {
+	if PcRecorder.Busy
+		return
 	global running, targetWindows, intervalMs, startTick, nextJumpTick, afkSec, ConfigFile
 
 	selected := Map()
@@ -270,12 +275,18 @@ WebviewExit(webview, *) {
 
 ; ---------------- 점프 입력 (잠깐만 전환 후 이전 창으로 복귀) ----------------
 DoJump() {
-	global running, targetWindows, intervalMs, nextJumpTick, jumpKey, jumpCount, holdMs
+	global running, targetWindows, intervalMs, nextJumpTick, jumpKey, jumpCount, holdMs, afkInputBusy
 	static busy := false
 
 	if !running || busy
 		return
+	; 사용자가 입력 중이면 이번 창 전환을 미뤄 채팅/클릭을 방해하지 않습니다.
+	if A_TimeIdlePhysical < 1500 {
+		nextJumpTick := A_TickCount + intervalMs
+		return
+	}
 	busy := true
+	afkInputBusy := true
 	prevHwnd := WinExist("A")
 	try {
 		for hwnd, pid in targetWindows.Clone() {
@@ -309,6 +320,7 @@ DoJump() {
 		if prevHwnd && WinExist("ahk_id " prevHwnd)
 			try WinActivate("ahk_id " prevHwnd)
 		busy := false
+		afkInputBusy := false
 	}
 	if !targetWindows.Count {
 		running := false
@@ -348,6 +360,8 @@ SendChatState() {
 }
 
 WebviewSetChatEnabled(webview, enabled, *) {
+	if PcRecorder.Busy
+		return
 	global chatEnabled, ConfigFile, lastImeShown
 
 	chatEnabled := (enabled = 1 || enabled = "1" || enabled = "true")
@@ -366,17 +380,17 @@ WebviewSetChatEnabled(webview, enabled, *) {
 ; 하드웨어 키 입력 그대로는 로블록스에서 막히는 경우가 있어, 잠수 방지 매크로의
 ; DoJump와 동일하게 SendEvent로 재전송해야 실제로 통합니다).
 ApplyChatEnabled(enabled) {
-	global RobloxActiveCond, imeStates
+	global imeStates
 
 	imeStates.Clear()
-	HotIf(RobloxActiveCond)
+	HotIfWinActive("ahk_exe RobloxPlayerBeta.exe")
 
 	if (enabled) {
-		Hotkey("vk15", ChatToggleHangul, "On")   ; 실제 한/영 키 자체를 강제로 통하게 함
-		Hotkey("/", ChatOpenToKorean, "On")
-		Hotkey("Enter", ChatSendToEnglish, "On")
+		Hotkey("$vk15", ChatToggleHangul, "On")
+		Hotkey("$/", ChatOpenToKorean, "On")
+		Hotkey("$Enter", ChatSendToEnglish, "On")
 	} else {
-		for k in ["vk15", "/", "Enter"]
+		for k in ["$vk15", "$/", "$Enter"]
 			try Hotkey(k, "Off")
 	}
 
@@ -457,6 +471,8 @@ ChatSendToEnglish(*) {
 
 ; 로블록스가 활성화돼 있는 동안 실제 한/영 상태를 화면에 보여주고, 기억값도 맞춥니다.
 PollImeState() {
+	if PcRecorder.Busy
+		return
 	global chatEnabled, targetExe, lastImeShown, imeStates
 	static lastHwnd := 0
 
@@ -482,6 +498,8 @@ UpdateChatStatus(text) {
 
 ; ---------------- 채팅 입력 범위 (범위를 클릭하면 한글로 전환) ----------------
 WebviewPickChatRegion(webview, *) {
+	if PcRecorder.Busy
+		return
 	; 화면(WebView) 콜백을 오래 붙잡지 않도록 따로 실행
 	SetTimer(PickChatRegion, -10)
 }
@@ -631,6 +649,8 @@ WebviewGetClickConfig(webview, *) {
 }
 
 WebviewSetClickSetting(webview, name, value, *) {
+	if PcRecorder.Busy
+		return
 	global holdKey, macroKey, macroSec, macroButton, macroOn, ConfigFile
 
 	switch name {
@@ -638,8 +658,8 @@ WebviewSetClickSetting(webview, name, value, *) {
 			if !RegExMatch(value, "^F([1-9]|1[0-2])$")
 				return
 			otherKey := (name = "holdKey") ? macroKey : holdKey
-			if (value = otherKey) {
-				MyGui.PostWebMessageAsJson('{"type":"clickError","content":"연타와 클릭 매크로의 온오프 키가 겹칩니다"}')
+			if (value = otherKey || PcRecorder.UsesKey(value)) {
+				MyGui.PostWebMessageAsJson('{"type":"clickError","content":"다른 클릭 또는 녹화 단축키와 겹칩니다"}')
 				SendClickConfig()
 				return
 			}
@@ -673,29 +693,26 @@ WebviewSetClickSetting(webview, name, value, *) {
 
 ; 온오프 키(F1~F12)를 로블록스 창에서만 동작하도록 (재)등록합니다.
 ApplyClickToggleKeys() {
-	global holdKey, macroKey, regHoldKey, regMacroKey, RobloxActiveCond
+	global holdKey, macroKey, regHoldKey, regMacroKey
 
-	HotIf(RobloxActiveCond)
+	HotIfWinActive("ahk_exe RobloxPlayerBeta.exe")
 	for k in [regHoldKey, regMacroKey] {
 		if (k != "")
 			try Hotkey(k, "Off")
 	}
-	Hotkey(holdKey, ToggleHoldClick, "On")
-	Hotkey(macroKey, ToggleMacroClick, "On")
+	Hotkey("$" holdKey, ToggleHoldClick, "On")
+	Hotkey("$" macroKey, ToggleMacroClick, "On")
 	HotIf()
 
-	regHoldKey := holdKey
-	regMacroKey := macroKey
+	regHoldKey := "$" holdKey
+	regMacroKey := "$" macroKey
 }
 
 SetupClickHotkeys() {
-	global HoldClickCond, LClickCond
-
 	; 누르고 있는 동안 연타: 실제 클릭은 그대로 통과(~)시키고 옆에서 추가 클릭만 보냄
 	; (좌클릭은 채팅 입력 범위 클릭 감지도 같은 핫키에서 처리)
-	HotIf(LClickCond)
+	HotIfWinActive("ahk_exe RobloxPlayerBeta.exe")
 	Hotkey("~LButton", HoldClickLeft, "On")
-	HotIf(HoldClickCond)
 	Hotkey("~RButton", HoldClickRight, "On")
 	HotIf()
 
@@ -740,7 +757,9 @@ HoldClickLeft(*) {
 }
 
 HoldClickRight(*) {
-	HoldClickLoop("RButton")
+	global holdOn
+	if holdOn
+		HoldClickLoop("RButton")
 }
 
 ; 버튼을 누르고 있는 동안 계속 눌렀다 뗐다를 반복합니다. 짧게 톡 누르고 떼면
@@ -748,13 +767,18 @@ HoldClickRight(*) {
 ; 매 반복을 "뗌 → 누름" 순서로 끝내서, 반복 중에도 버튼이 눌린 상태가 유지되고
 ; 실제로 손을 뗄 때 자연스럽게 마무리됩니다.
 HoldClickLoop(btn) {
-	global holdOn, holdClickMs
+	global holdOn, holdClickMs, afkInputBusy
 
+	hwnd := WinActive("ahk_exe RobloxPlayerBeta.exe")
+	if !hwnd || afkInputBusy
+		return
 	if KeyWait(btn, "P T0.15")
 		return
-	while (holdOn && GetKeyState(btn, "P")) {
+	while (holdOn && !afkInputBusy && WinActive("ahk_id " hwnd) && GetKeyState(btn, "P")) {
 		SendEvent("{" btn " up}")
 		Sleep(10)
+		if !WinActive("ahk_id " hwnd) || !GetKeyState(btn, "P")
+			break
 		SendEvent("{" btn " down}")
 		Sleep(holdClickMs)
 	}
@@ -763,9 +787,9 @@ HoldClickLoop(btn) {
 ; 클릭 매크로: 설정한 간격마다 현재 마우스 위치에서 선택한 버튼을 클릭합니다.
 ; 로블록스 창이 활성화돼 있을 때만 클릭합니다.
 MacroClickTick() {
-	global macroButton, targetExe
+	global macroButton, targetExe, macroOn, afkInputBusy
 
-	if !WinActive("ahk_exe " targetExe)
+	if !macroOn || afkInputBusy || !WinActive("ahk_exe " targetExe)
 		return
 	SendEvent("{" macroButton " down}")
 	Sleep(10)
@@ -803,6 +827,8 @@ mygui_Close(*) {
 	trueExit(0, 0)
 }
 trueExit(ExitReason, ExitCode){
+	if PcRecorder.Busy
+		PcRecorder.Stop()
 	ExitApp(ExitCode)
 }
 
@@ -810,5 +836,7 @@ trueExit(ExitReason, ExitCode){
 
 ;@Ahk2Exe-IgnoreBegin
 ; For dev
+#HotIf !PcRecorder.Busy && !PcRecorder.UsesKey("F6")
 F6::ExitApp(5173)
+#HotIf
 ;@Ahk2Exe-IgnoreEnd
