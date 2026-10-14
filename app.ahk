@@ -2,7 +2,7 @@
 ;@Ahk2Exe-SetName 딘 로블록스 도우미
 ;@Ahk2Exe-SetProductName 딘 로블록스 도우미
 ;@Ahk2Exe-SetDescription DEAN ROBLOX
-;@Ahk2Exe-SetVersion 1.6.0.0
+;@Ahk2Exe-SetVersion 1.7.0.0
 ;@Ahk2Exe-SetCompanyName Roblox_DEAN
 ;@Ahk2Exe-SetCopyright Roblox_DEAN
 #SingleInstance force
@@ -376,9 +376,7 @@ WebviewSetChatEnabled(webview, enabled, *) {
 }
 
 ; 로블록스 창에서만 활성화되는 채팅/한영 핫키를 켜고 끕니다.
-; 물리 키를 가로챈 뒤 SendEvent로 재전송합니다 (기본 SendInput 방식이나 실제
-; 하드웨어 키 입력 그대로는 로블록스에서 막히는 경우가 있어, 잠수 방지 매크로의
-; DoJump와 동일하게 SendEvent로 재전송해야 실제로 통합니다).
+; 물리 한/영 키는 그대로 전달하고 상태만 기억합니다
 ApplyChatEnabled(enabled) {
 	global imeStates
 
@@ -386,11 +384,11 @@ ApplyChatEnabled(enabled) {
 	HotIfWinActive("ahk_exe RobloxPlayerBeta.exe")
 
 	if (enabled) {
-		Hotkey("$vk15", ChatToggleHangul, "On")
+		Hotkey("~$vk15", ChatToggleHangul, "On")
 		Hotkey("$/", ChatOpenToKorean, "On")
 		Hotkey("$Enter", ChatSendToEnglish, "On")
 	} else {
-		for k in ["$vk15", "$/", "$Enter"]
+		for k in ["~$vk15", "$/", "$Enter"]
 			try Hotkey(k, "Off")
 	}
 
@@ -414,18 +412,18 @@ GetHangulMode() {
 	return (mode & 1) ? 1 : 0
 }
 
-; 실제 상태를 읽을 수 있으면 그 값으로 우리가 기억하는 값을 바로잡고, 읽을 수
-; 없을 때만 기억해둔 값을 씁니다. (시작할 때 이미 한글이었던 경우도 여기서 맞춰짐)
+; 창별 기억값을 우선합니다. Roblox의 IME 조회값이 고정되어 있어도 덮어쓰지 않습니다.
 IsKoreanNow() {
 	global imeStates
-
-	hwnd := WinExist("A")
-	mode := GetHangulMode()
-	if (mode != "")
-		RememberIme(mode)
+	hwnd := WinActive("ahk_exe RobloxPlayerBeta.exe")
+	if !hwnd
+		return false
 	if imeStates.Has(hwnd) && imeStates[hwnd].pid = WinGetPID("ahk_id " hwnd)
 		return imeStates[hwnd].korean
-	return false
+	mode := GetHangulMode()
+	if mode != ""
+		RememberIme(mode)
+	return mode = "" ? false : mode
 }
 
 RememberIme(korean) {
@@ -435,13 +433,12 @@ RememberIme(korean) {
 		imeStates[hwnd] := {pid: WinGetPID("ahk_id " hwnd), korean: korean}
 }
 
-; 물리 한/영 키(VK_HANGUL, 0x15): 로블록스가 실제 하드웨어 키 입력은 무시해도
-; SendEvent로 재전송하면 통과되는 경우가 많아, 그대로 다시 눌러줍니다.
+; 물리 입력을 차단하거나 합성 입력으로 대체하지 않습니다.
 ChatToggleHangul(*) {
 	before := IsKoreanNow()
-	SendEvent("{vk15}")
 	RememberIme(!before)
-	UpdateChatStatus(!before ? "한글 전환됨 (수동)" : "영어 전환됨 (수동)")
+	UpdateChatStatus("한/영 전환 키 입력됨")
+	KeyWait("vk15")
 }
 
 ; "/" 키: 채팅을 열고, 이미 한글이면 아무것도 안 하고 영어일 때만 한 번 토글해서
@@ -469,7 +466,7 @@ ChatSendToEnglish(*) {
 	UpdateChatStatus("전송 완료 - 영어로 전환됨")
 }
 
-; 로블록스가 활성화돼 있는 동안 실제 한/영 상태를 화면에 보여주고, 기억값도 맞춥니다.
+; 활성 Roblox 창에 기억한 한/영 상태를 표시합니다.
 PollImeState() {
 	if PcRecorder.Busy
 		return
@@ -478,7 +475,7 @@ PollImeState() {
 
 	if (!chatEnabled || !WinActive("ahk_exe " targetExe))
 		return
-	mode := GetHangulMode()
+	mode := IsKoreanNow()
 	hwnd := WinExist("A")
 	if (mode = lastImeShown && hwnd = lastHwnd)
 		return
