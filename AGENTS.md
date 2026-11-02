@@ -106,3 +106,5 @@ No test framework is configured. Verify changes manually by running `npm run dev
 - 감지 모드에서도 300초마다 모든 선택 창에 스페이스 한 번을 보냅니다. `ProtectionHeartbeat`가 감지와 별도의 1초 타이머로 `NextJumpTick`을 확인해 `DoJump(true)`를 호출하며 실패한 창만 재시도한 뒤 다음 300초를 셉니다. 감지·리스폰과 점프는 `afkInputBusy`와 감지 Busy 상태로 겹침을 막고 중단 시 두 타이머를 함께 해제합니다.
 
 - 300초 점프 기한은 리스폰·캡처로 초기화하지 않으며 기한이 되면 새 캡처보다 우선 처리합니다. 입력 중첩 때도 기한을 유지하여 다음 타이머 틱에 다시 시도합니다.
+
+- 캡처 도우미는 `CreateProcessW`의 `STARTF_FORCEOFFFEEDBACK | STARTF_USESHOWWINDOW`로 숨겨 실행해 매초 실행 로딩 커서가 표시되지 않도록 합니다. 반환된 프로세스 핸들을 직접 보관하며 thread 핸들은 즉시 닫습니다. `Run`으로 되돌리면 로딩 커서가 다시 나타날 수 있습니다.

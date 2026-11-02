@@ -98,10 +98,7 @@ class RobberyProtection {
 					}
 					path := this.TempRoot "\" hwnd
 					this.CleanFiles(path)
-					Run('"' this.Helper '" ' hwnd ' ' pid ' "' path '"', , "Hide", &workerPid)
-					handle := DllCall("OpenProcess", "uint", 0x101001, "int", false, "uint", workerPid, "ptr")
-					if !handle
-						throw Error("캡처 프로세스 핸들을 열 수 없습니다")
+					handle := this.CreateWorker(hwnd, pid, path)
 					this.Jobs[hwnd] := {Pid: pid, Path: path, Handle: handle, Start: A_TickCount}
 				}
 			}
@@ -117,6 +114,22 @@ class RobberyProtection {
 		} finally {
 			this.Busy := false
 		}
+	}
+
+	static CreateWorker(hwnd, pid, path) {
+		; STARTF_FORCEOFFFEEDBACK | STARTF_USESHOWWINDOW: 실행 로딩 커서·창 표시 억제.
+		startup := Buffer(104, 0)
+		NumPut("uint", startup.Size, startup, 0)
+		NumPut("uint", 0x81, startup, 60)
+		NumPut("ushort", 0, startup, 64)
+		command := '"' this.Helper '" ' hwnd ' ' pid ' "' path '"'
+		commandBuffer := Buffer((StrLen(command) + 1) * 2, 0)
+		StrPut(command, commandBuffer, "UTF-16")
+		process := Buffer(24, 0)
+		if !DllCall("CreateProcessW", "wstr", this.Helper, "ptr", commandBuffer, "ptr", 0, "ptr", 0, "int", false, "uint", 0x08000000, "ptr", 0, "ptr", 0, "ptr", startup, "ptr", process)
+			throw OSError(A_LastError, "CreateProcessW", "캡처 도우미 실행 실패")
+		DllCall("CloseHandle", "ptr", NumGet(process, 8, "ptr"))
+		return NumGet(process, 0, "ptr")
 	}
 
 	static ValidTarget(hwnd, pid) {
