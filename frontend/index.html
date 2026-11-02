@@ -137,6 +137,7 @@
 			}
 
 			function onStarted() {
+				document.getElementById("protection-count").textContent = "0회"
 				running = true
 				document.getElementById("start-btn").disabled = true
 				document.getElementById("stop-btn").disabled = false
@@ -169,12 +170,14 @@
 				} else {
 					setState("대기 중", "badge-neutral")
 				}
+				applyAfkMode()
 				updateStartButton()
 			}
 
 			function updateStatus(content) {
 				document.getElementById("elapsed-time").textContent = formatTime(content.elapsed)
 				document.getElementById("next-jump").textContent = content.nextIn + "초"
+				document.getElementById("protection-count").textContent = (content.protectionCount || 0) + "회"
 				afkWaitingInput = !!content.waitingInput
 				renderFooterMessage()
 			}
@@ -311,12 +314,23 @@
 				ahk.SetChatEnabled(checkbox.checked)
 			}
 
+			function applyAfkMode() {
+				const detecting = document.getElementById("jump-key-select").value === "Detect"
+				document.getElementById("interval-input").disabled = running || detecting
+				document.getElementById("jump-count-input").disabled = running || detecting
+				document.getElementById("afk-timing").classList.toggle("hidden", detecting)
+				document.getElementById("protection-summary").classList.toggle("hidden", !detecting)
+				document.getElementById("detect-note").classList.toggle("hidden", !detecting)
+			}
+
 			function setJumpKeySelect(key) {
 				document.getElementById("jump-key-select").value = key
+				applyAfkMode()
 			}
 
 			function onChangeJumpKey(select) {
 				ahk.SetJumpKey(select.value)
+				applyAfkMode()
 			}
 
 			function setJumpCountInput(count) {
@@ -473,6 +487,7 @@
 								<option value="Space">점프</option>
 								<option value="Movement">움직임</option>
 								<option value="Respawn">리스폰</option>
+								<option value="Detect">감지</option>
 								<option value="E">E</option>
 								<option value="1">1</option>
 								<option value="2">2</option>
@@ -492,7 +507,7 @@
 						</div>
 					</div>
 
-					<div class="flex flex-col gap-1 rounded-box bg-base-300 p-3">
+					<div id="afk-timing" class="flex flex-col gap-1 rounded-box bg-base-300 p-3">
 						<div class="flex justify-between text-sm">
 							<span class="text-base-content/60">경과 시간</span>
 							<span id="elapsed-time" class="font-mono font-semibold">00:00:00</span>
@@ -502,6 +517,12 @@
 							<span id="next-jump" class="font-mono font-semibold">-</span>
 						</div>
 					</div>
+
+					<div id="protection-summary" class="hidden flex justify-between items-center rounded-box bg-base-300 p-3 text-sm">
+						<span class="text-base-content/60">보호 횟수</span>
+						<span id="protection-count" class="font-mono font-semibold text-primary">0회</span>
+					</div>
+					<p id="detect-note" class="hidden text-xs text-base-content/60">범인을 감지하면 폴더에 사진 저장됩니다<br>튕김 방지로 300초마다 점프합니다</p>
 
 					<div id="error-box" class="alert alert-error text-sm py-2 hidden"></div>
 

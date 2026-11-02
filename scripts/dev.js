@@ -1,3 +1,4 @@
+import "./build-capture.mjs"
 import { spawn } from "child_process"
 import chokidar from "chokidar"
 

@@ -2,7 +2,7 @@
 ;@Ahk2Exe-SetName 딘 로블록스 도우미
 ;@Ahk2Exe-SetProductName 딘 로블록스 도우미
 ;@Ahk2Exe-SetDescription DEAN ROBLOX
-;@Ahk2Exe-SetVersion 1.14.0.0
+;@Ahk2Exe-SetVersion 1.15.0.0
 ;@Ahk2Exe-SetCompanyName Roblox_DEAN
 ;@Ahk2Exe-SetCopyright Roblox_DEAN
 #SingleInstance force
@@ -29,6 +29,9 @@ SetWinDelay(-1)
 #Include webview\WebViewToo.ahk
 #Include ./session-unlocker.ahk
 #Include ./pc-recorder.ahk
+#Include ./vendor/FindText.ahk
+#Include ./robbery-patterns.ahk
+#Include ./robbery-protection.ahk
 
 ConfigFile   := AppDir "\setting.dean"
 ; 예전 이름(setting.milky)의 설정이 있으면 새 이름으로 옮겨서 값을 유지합니다.
@@ -222,8 +225,9 @@ WebviewSetJumpCount(webview, count, *) {
 
 ; ---------------- 시작 ----------------
 WebviewStart(webview, hwndList, interval, *) {
-	if PcRecorder.Busy
+	if PcRecorder.Busy || running || afkInputBusy
 		return
+	global jumpKey
 	global running, targetWindows, afkPendingWindows, intervalMs, startTick, nextJumpTick, afkSec, ConfigFile
 
 	selected := Map()
@@ -254,7 +258,17 @@ WebviewStart(webview, hwndList, interval, *) {
 	startTick := A_TickCount
 	nextJumpTick := A_TickCount + intervalMs
 
-	SetTimer(DoJump, -intervalMs)
+	if jumpKey = "Detect" {
+		try RobberyProtection.Start()
+		catch as e {
+			running := false
+			MyGui.PostWebMessageAsJson('{"type":"error","content":"' JsonEscape(e.Message) '"}')
+			return
+		}
+	} else {
+		RobberyProtection.Count := 0
+		SetTimer(DoJump, -intervalMs)
+	}
 	SetTimer(SendStatus, 1000)
 	MyGui.PostWebMessageAsJson('{"type":"started","content":{}}')
 	SendStatus()
@@ -265,6 +279,7 @@ WebviewStop(webview, *) {
 	global running
 
 	running := false
+	RobberyProtection.Stop()
 	SetTimer(DoJump, 0)
 	SetTimer(SendStatus, 0)
 	MyGui.PostWebMessageAsJson('{"type":"stopped","content":{"reason":"user"}}')
@@ -275,15 +290,25 @@ WebviewExit(webview, *) {
 	ExitApp(0)
 }
 
+; 감지 모드에서도 300초마다 모든 선택 창에 점프 한 번을 보냅니다.
+ProtectionHeartbeat(*) {
+	global running, afkInputBusy
+	if !running || !RobberyProtection.Active || A_TickCount < RobberyProtection.NextJumpTick
+		return
+	if RobberyProtection.Busy || afkInputBusy || PcRecorder.Busy
+		return
+	DoJump(true)
+}
+
 ; ---------------- 점프 입력 (잠깐만 전환 후 이전 창으로 복귀) ----------------
-DoJump() {
+DoJump(protectionCycle := false) {
 	global running, targetWindows, afkPendingWindows, intervalMs, nextJumpTick, jumpKey, jumpCount, holdMs, afkInputBusy
 	static busy := false
 
-	if !running || busy
+	if !running || busy || afkInputBusy
 		return
 	; 사용자가 입력 중이면 이번 창 전환을 미뤄 채팅/클릭을 방해하지 않습니다.
-	if A_TimeIdlePhysical < 500 {
+	if !protectionCycle && A_TimeIdlePhysical < 500 {
 		nextJumpTick := A_TickCount + 1000
 		SetTimer(DoJump, -1000)
 		return
@@ -294,10 +319,10 @@ DoJump() {
 	try {
 		if !afkPendingWindows.Count
 			afkPendingWindows := targetWindows.Clone()
-		action := jumpKey
+		action := protectionCycle ? "Space" : jumpKey
 		keys := action = "Movement" ? ["Space", "a", "s", "d", "w"]
 			: action = "Respawn" ? ["Esc", "r", "Enter"] : [action]
-		count := jumpCount
+		count := protectionCycle ? 1 : jumpCount
 		keyHoldMs := jumpKey = "Movement" ? 80 : holdMs
 		for hwnd, pid in afkPendingWindows.Clone() {
 			if !running
@@ -326,13 +351,13 @@ DoJump() {
 							completed := false
 							break
 						}
-						keyHoldMs := action = "Movement" ? (key = "Space" ? 80 : 200) : holdMs
+						keyHoldMs := action = "Respawn" ? 150 : (action = "Movement" ? (key = "Space" ? 80 : 200) : holdMs)
 						SendEvent("{" key " down}")
 						try Sleep(keyHoldMs)
 						finally SendEvent("{" key " up}")
 						; 메뉴와 확인창이 열린 뒤 다음 키를 보냅니다.
 						if action = "Respawn" && keyIndex < keys.Length
-							Sleep(300)
+							Sleep(900)
 					}
 					if !completed
 						break
@@ -359,9 +384,12 @@ DoJump() {
 
 	if running {
 		; 미입력 창만 재시도하고 전체 완료 후 다음 간격을 시작합니다.
-		delay := afkPendingWindows.Count ? 1000 : intervalMs
+		delay := afkPendingWindows.Count ? 1000 : (protectionCycle ? 300000 : intervalMs)
 		nextJumpTick := A_TickCount + delay
-		SetTimer(DoJump, -delay)
+		if protectionCycle
+			RobberyProtection.NextJumpTick := A_TickCount + delay
+		else
+			SetTimer(DoJump, -delay)
 		SendStatus()
 	}
 }
@@ -378,8 +406,8 @@ SendStatus() {
 	if nextIn < 0
 		nextIn := 0
 
-	waitingInput := !afkInputBusy && A_TimeIdlePhysical < 500
-	MyGui.PostWebMessageAsJson('{"type":"status","content":{"elapsed":' elapsed ',"nextIn":' nextIn ',"waitingInput":' (waitingInput ? "true" : "false") '}}')
+	waitingInput := !RobberyProtection.Active && !afkInputBusy && A_TimeIdlePhysical < 500
+	MyGui.PostWebMessageAsJson('{"type":"status","content":{"elapsed":' elapsed ',"nextIn":' nextIn ',"captureFailures":' RobberyProtection.CaptureErrors.Count ',"protectionCount":' RobberyProtection.Count ',"waitingInput":' (waitingInput ? "true" : "false") '}}')
 }
 
 ; ---------------- 채팅 한/영 자동전환 ----------------
@@ -864,6 +892,7 @@ mygui_Close(*) {
 	trueExit(0, 0)
 }
 trueExit(ExitReason, ExitCode){
+	RobberyProtection.Dispose()
 	if PcRecorder.Busy
 		PcRecorder.Stop()
 	ExitApp(ExitCode)

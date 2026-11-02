@@ -53,3 +53,7 @@ dist-ssr
 *.sw?
 build/
 release/
+
+/캡처 테스트/
+
+/소매치기 범인/

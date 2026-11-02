@@ -10,7 +10,7 @@
     "dev:front": "vite",
     "prebuild:ahk": "ahk64 run gen_resource.ahk",
     "build:ahk": "ahk64 compile /in app.ahk /icon app.ico /compress 0",
-    "build:front": "vite build",
+    "build:front": "node scripts/build-capture.mjs && vite build",
     "preview:front": "vite preview",
     "dev": "node scripts/dev.js",
     "dev:watch": "set AHK_WATCH=1 && node scripts/dev.js",
@@ -18,7 +18,8 @@
     "build:core": "npm run build:front && node scripts/bundle-core.mjs app.ahk build/app.bundle.ahk && ahk64 run /ErrorStdOut scripts/pack-core.ahk",
     "build:launcher": "node scripts/build-launcher.mjs",
     "preview": "start /B app.exe",
-    "init": "node scripts/init-workspace.js"
+    "init": "node scripts/init-workspace.js",
+    "build:capture": "node scripts/build-capture.mjs"
   },
   "devDependencies": {
     "ahk64": "^2.0.19",

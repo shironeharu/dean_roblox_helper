@@ -83,6 +83,8 @@ Press `F6` in dev mode to reload the AHK script. Press `Ctrl+C` to exit dev mode
 
 - `session-unlocker.ahk`: 앱 시작 구간에서 include하는 Windows x64 멀티 실행 모듈. 실행 수 제한 없이 기존 Roblox의 `ROBLOX_singletonEvent`만 해제하고 한 번에 하나씩 추가 실행합니다. 클래스 초기화가 있으므로 auto-execute의 `return` 뒤에 include하지 않습니다.
 - 잠수도우미는 선택한 HWND/PID 목록을 순회합니다. 일부 창이 닫혀도 나머지는 계속 실행합니다. 채팅 한/영 기억값은 HWND/PID별로 관리하며 입력을 다른 창에 복제하지 않습니다.
+- `robbery-protection.ahk`는 잠수 키 `감지` 모드입니다. 경고 아이콘 모양만 FindText로 검사합니다. 사용자 원본 패턴과 실제 큰/작은 창에서 추출한 아이콘 패턴을 함께 사용하며 60~150% 배율과 글자·배경 오차 각각 15%를 허용합니다. 빨간 진행 막대·비슷한 피부색·이름표만으로 감지하지 않습니다. 1초마다 선택한 모든 HWND/PID에 별도 캡처 프로세스를 요청하며 처리 중인 창은 중복 실행하지 않습니다. 최소화·검은 캡처는 경고를 표시하고 미감지로 처리하지 않습니다. 검사 대상은 확인용과 동일한 JPG이며 감지 시 전체 JPG를 앱 설정 폴더의 `소매치기 범인`에 `범인 yyMMdd_AM/PM_hh_mm.jpg` 형식으로 한 번 저장하고 해당 창에만 리스폰 입력을 보냅니다. 문구 소실 3회와 10초 재실행 제한이 있으며 보호 횟수는 입력 완료 횟수입니다.
+- `window-capture.cs`는 Windows .NET Framework C# 캡처 도우미입니다. `scripts/build-capture.mjs`가 `frontend/public/assets/dean-window-capture.exe`를 생성하며 `npm run dev` 및 `npm run build:front`에서 먼저 빌드합니다. 이 EXE는 UI_MANIFEST를 통해 DLL에 포함됩니다. PrintWindow(3)는 별도 프로세스에서만 호출하고 부모는 프로세스 핸들로 2.5초 제한·중단을 관리합니다. 창별 임시 JPG/ready 슬롯은 처리 후 삭제하고 사건 JPG만 보존합니다. FindText는 저장된 상단 중앙 600×200 영역을 메모리에서 검색하며 배율 간 캡처를 재사용합니다. `vendor/FindText.README.md`에 라이브러리 출처를 기록합니다.
 - 멀티 실행 목록의 ID는 Roblox 계정 ID가 아니라 Windows PID입니다. 실제 게임의 세션을 변경하는 테스트와 테스트용 프로세스 검증을 구분합니다.
 
 No test framework is configured. Verify changes manually by running `npm run dev` and interacting with the WebView UI.
@@ -98,3 +100,9 @@ No test framework is configured. Verify changes manually by running `npm run dev
 - Update this AGENTS.md when repository conventions, commands, structure, or workflows change.
 
 - PC 녹화 단축키는 Recorder 섹션에 저장하며 F1~F12와 Insert/Home/PgUp/PgDn/Delete/End를 지원합니다. 클릭 단축키와 중복을 금지합니다. 재생 키는 일시정지/재개를 겸하고 Ctrl+Alt+Esc는 긴급 중단입니다. F6을 녹화 단축키로 지정하면 개발 재시작 키는 비활성화됩니다. 녹화 파일은 검증된 숫자 이벤트를 담는 .deanrec 형식입니다.
+
+- 감지 모드의 캡처·리스폰은 물리 입력 중에도 실행합니다. 일반 잠수 입력의 0.5초 입력 대기는 유지합니다. 테스트용 최신 캡처 보관은 제거했으며 사건 저장은 `소매치기 범인`에 유지합니다. 기존 캡처 폴더들은 Git에서 제외합니다.
+
+- 감지 모드에서도 300초마다 모든 선택 창에 스페이스 한 번을 보냅니다. `ProtectionHeartbeat`가 감지와 별도의 1초 타이머로 `NextJumpTick`을 확인해 `DoJump(true)`를 호출하며 실패한 창만 재시도한 뒤 다음 300초를 셉니다. 감지·리스폰과 점프는 `afkInputBusy`와 감지 Busy 상태로 겹침을 막고 중단 시 두 타이머를 함께 해제합니다.
+
+- 300초 점프 기한은 리스폰·캡처로 초기화하지 않으며 기한이 되면 새 캡처보다 우선 처리합니다. 입력 중첩 때도 기한을 유지하여 다음 타이머 틱에 다시 시도합니다.
