@@ -2,7 +2,7 @@
 ;@Ahk2Exe-SetName 딘 로블록스 도우미
 ;@Ahk2Exe-SetProductName 딘 로블록스 도우미
 ;@Ahk2Exe-SetDescription DEAN ROBLOX
-;@Ahk2Exe-SetVersion 1.8.0.0
+;@Ahk2Exe-SetVersion 1.9.0.0
 ;@Ahk2Exe-SetCompanyName Roblox_DEAN
 ;@Ahk2Exe-SetCopyright Roblox_DEAN
 #SingleInstance force
@@ -40,6 +40,7 @@ targetExe    := "RobloxPlayerBeta.exe"
 running      := false
 afkInputBusy := false
 targetWindows := Map()
+afkPendingWindows := Map()
 intervalMs   := 60000
 startTick    := 0
 nextJumpTick := 0
@@ -223,7 +224,7 @@ WebviewSetJumpCount(webview, count, *) {
 WebviewStart(webview, hwndList, interval, *) {
 	if PcRecorder.Busy
 		return
-	global running, targetWindows, intervalMs, startTick, nextJumpTick, afkSec, ConfigFile
+	global running, targetWindows, afkPendingWindows, intervalMs, startTick, nextJumpTick, afkSec, ConfigFile
 
 	selected := Map()
 	for value in StrSplit(hwndList, ",") {
@@ -247,12 +248,13 @@ WebviewStart(webview, hwndList, interval, *) {
 	IniWrite(sec, ConfigFile, "Afk", "Interval")
 
 	targetWindows := selected
+	afkPendingWindows := Map()
 	intervalMs := sec * 1000
 	running := true
 	startTick := A_TickCount
 	nextJumpTick := A_TickCount + intervalMs
 
-	SetTimer(DoJump, intervalMs)
+	SetTimer(DoJump, -intervalMs)
 	SetTimer(SendStatus, 1000)
 	MyGui.PostWebMessageAsJson('{"type":"started","content":{}}')
 	SendStatus()
@@ -275,45 +277,64 @@ WebviewExit(webview, *) {
 
 ; ---------------- 점프 입력 (잠깐만 전환 후 이전 창으로 복귀) ----------------
 DoJump() {
-	global running, targetWindows, intervalMs, nextJumpTick, jumpKey, jumpCount, holdMs, afkInputBusy
+	global running, targetWindows, afkPendingWindows, intervalMs, nextJumpTick, jumpKey, jumpCount, holdMs, afkInputBusy
 	static busy := false
 
 	if !running || busy
 		return
 	; 사용자가 입력 중이면 이번 창 전환을 미뤄 채팅/클릭을 방해하지 않습니다.
 	if A_TimeIdlePhysical < 1500 {
-		nextJumpTick := A_TickCount + intervalMs
+		nextJumpTick := A_TickCount + 1000
+		SetTimer(DoJump, -1000)
 		return
 	}
 	busy := true
 	afkInputBusy := true
 	prevHwnd := WinExist("A")
 	try {
-		for hwnd, pid in targetWindows.Clone() {
+		if !afkPendingWindows.Count
+			afkPendingWindows := targetWindows.Clone()
+		keys := jumpKey = "Movement" ? ["a", "s", "d", "w"] : [jumpKey]
+		count := jumpCount
+		keyHoldMs := jumpKey = "Movement" ? 80 : holdMs
+		for hwnd, pid in afkPendingWindows.Clone() {
 			if !running
 				break
 			try {
 				if WinGetPID("ahk_id " hwnd) != pid || WinGetProcessName("ahk_id " hwnd) != "RobloxPlayerBeta.exe" {
 					targetWindows.Delete(hwnd)
+					afkPendingWindows.Delete(hwnd)
 					continue
 				}
 			} catch {
 				targetWindows.Delete(hwnd)
+				afkPendingWindows.Delete(hwnd)
 				continue
 			}
 			try {
 				WinActivate("ahk_id " hwnd)
 				if !WinWaitActive("ahk_id " hwnd, , 1)
 					continue
-				Loop jumpCount {
-					if !running || !WinActive("ahk_id " hwnd)
+				; 창 전환 직후 게임이 입력을 받을 시간을 줍니다.
+				Sleep(150)
+				completed := true
+				Loop count {
+					for key in keys {
+						if !running || !WinActive("ahk_id " hwnd) {
+							completed := false
+							break
+						}
+						SendEvent("{" key " down}")
+						try Sleep(keyHoldMs)
+						finally SendEvent("{" key " up}")
+					}
+					if !completed
 						break
-					SendEvent("{" jumpKey " down}")
-					Sleep(holdMs)
-					SendEvent("{" jumpKey " up}")
-					if A_Index < jumpCount
+					if A_Index < count
 						Sleep(100)
 				}
+				if completed
+					afkPendingWindows.Delete(hwnd)
 			}
 		}
 	} finally {
@@ -330,7 +351,13 @@ DoJump() {
 		return
 	}
 
-	nextJumpTick := A_TickCount + intervalMs
+	if running {
+		; 미입력 창만 재시도하고 전체 완료 후 다음 간격을 시작합니다.
+		delay := afkPendingWindows.Count ? 1000 : intervalMs
+		nextJumpTick := A_TickCount + delay
+		SetTimer(DoJump, -delay)
+		SendStatus()
+	}
 }
 
 ; ---------------- 경과 시간 / 다음 점프까지 남은 시간 통지 ----------------
