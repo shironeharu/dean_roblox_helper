@@ -2,7 +2,7 @@
 ;@Ahk2Exe-SetName 딘 로블록스 도우미
 ;@Ahk2Exe-SetProductName 딘 로블록스 도우미
 ;@Ahk2Exe-SetDescription DEAN ROBLOX
-;@Ahk2Exe-SetVersion 1.9.0.0
+;@Ahk2Exe-SetVersion 1.10.0.0
 ;@Ahk2Exe-SetCompanyName Roblox_DEAN
 ;@Ahk2Exe-SetCopyright Roblox_DEAN
 #SingleInstance force
@@ -47,7 +47,7 @@ nextJumpTick := 0
 jumpKey      := IniRead(ConfigFile, "Afk", "JumpKey", "Space")
 jumpCount    := IniRead(ConfigFile, "Afk", "JumpCount", "1")
 afkSec       := IniRead(ConfigFile, "Afk", "Interval", "60")
-afkSec       := IsInteger(afkSec) ? Max(Integer(afkSec), 5) : 60
+afkSec       := IsInteger(afkSec) ? Max(Integer(afkSec), 1) : 60
 holdMs       := 50
 
 ; ---------------- 채팅 한/영 자동전환 상태 ----------------
@@ -196,7 +196,7 @@ WebviewSetAfkInterval(webview, interval, *) {
 
 	if !IsNumber(interval)
 		return
-	afkSec := Max(Integer(interval), 5)
+	afkSec := Max(Integer(interval), 1)
 	IniWrite(afkSec, ConfigFile, "Afk", "Interval")
 	WebviewGetAfkConfig(webview)
 }
@@ -242,8 +242,8 @@ WebviewStart(webview, hwndList, interval, *) {
 	}
 
 	sec := Integer(interval)
-	if sec < 5
-		sec := 5
+	if sec < 1
+		sec := 1
 	afkSec := sec
 	IniWrite(sec, ConfigFile, "Afk", "Interval")
 
