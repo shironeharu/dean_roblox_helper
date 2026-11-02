@@ -2,7 +2,7 @@
 ;@Ahk2Exe-SetName 딘 로블록스 도우미
 ;@Ahk2Exe-SetProductName 딘 로블록스 도우미
 ;@Ahk2Exe-SetDescription DEAN ROBLOX
-;@Ahk2Exe-SetVersion 1.13.0.0
+;@Ahk2Exe-SetVersion 1.14.0.0
 ;@Ahk2Exe-SetCompanyName Roblox_DEAN
 ;@Ahk2Exe-SetCopyright Roblox_DEAN
 #SingleInstance force
@@ -283,7 +283,7 @@ DoJump() {
 	if !running || busy
 		return
 	; 사용자가 입력 중이면 이번 창 전환을 미뤄 채팅/클릭을 방해하지 않습니다.
-	if A_TimeIdlePhysical < 1500 {
+	if A_TimeIdlePhysical < 500 {
 		nextJumpTick := A_TickCount + 1000
 		SetTimer(DoJump, -1000)
 		return
@@ -378,7 +378,7 @@ SendStatus() {
 	if nextIn < 0
 		nextIn := 0
 
-	waitingInput := !afkInputBusy && A_TimeIdlePhysical < 1500
+	waitingInput := !afkInputBusy && A_TimeIdlePhysical < 500
 	MyGui.PostWebMessageAsJson('{"type":"status","content":{"elapsed":' elapsed ',"nextIn":' nextIn ',"waitingInput":' (waitingInput ? "true" : "false") '}}')
 }
 
