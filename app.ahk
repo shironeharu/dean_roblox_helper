@@ -2,7 +2,7 @@
 ;@Ahk2Exe-SetName 딘 로블록스 도우미
 ;@Ahk2Exe-SetProductName 딘 로블록스 도우미
 ;@Ahk2Exe-SetDescription DEAN ROBLOX
-;@Ahk2Exe-SetVersion 1.10.0.0
+;@Ahk2Exe-SetVersion 1.11.0.0
 ;@Ahk2Exe-SetCompanyName Roblox_DEAN
 ;@Ahk2Exe-SetCopyright Roblox_DEAN
 #SingleInstance force
@@ -362,7 +362,7 @@ DoJump() {
 
 ; ---------------- 경과 시간 / 다음 점프까지 남은 시간 통지 ----------------
 SendStatus() {
-	global running, startTick, nextJumpTick
+	global running, startTick, nextJumpTick, afkInputBusy
 
 	if !running
 		return
@@ -372,7 +372,8 @@ SendStatus() {
 	if nextIn < 0
 		nextIn := 0
 
-	MyGui.PostWebMessageAsJson('{"type":"status","content":{"elapsed":' elapsed ',"nextIn":' nextIn '}}')
+	waitingInput := !afkInputBusy && A_TimeIdlePhysical < 1500
+	MyGui.PostWebMessageAsJson('{"type":"status","content":{"elapsed":' elapsed ',"nextIn":' nextIn ',"waitingInput":' (waitingInput ? "true" : "false") '}}')
 }
 
 ; ---------------- 채팅 한/영 자동전환 ----------------

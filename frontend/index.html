@@ -9,6 +9,7 @@
 		<script>
 			let running = false
 			let recorderBusy = false
+			let afkWaitingInput = false
 
 			window.chrome.webview.addEventListener("message", (Msg) => {
 				const data = Msg.data
@@ -150,6 +151,8 @@
 
 			function onStopped(content) {
 				running = false
+				afkWaitingInput = false
+				renderFooterMessage()
 				document.getElementById("start-btn").disabled = false
 				document.getElementById("stop-btn").disabled = true
 				document.getElementById("window-select").disabled = false
@@ -172,6 +175,8 @@
 			function updateStatus(content) {
 				document.getElementById("elapsed-time").textContent = formatTime(content.elapsed)
 				document.getElementById("next-jump").textContent = content.nextIn + "초"
+				afkWaitingInput = !!content.waitingInput
+				renderFooterMessage()
 			}
 
 			function setState(text, badgeClass) {
@@ -269,12 +274,21 @@
 			}
 
 			var footerTimer = null
-			// 안내 문구는 창 맨 아래에 작은 글씨로만 잠깐 보여줍니다
+			let footerMessage = ""
+			function renderFooterMessage() {
+				document.getElementById("footer-message").textContent = afkWaitingInput
+					? "사용자 입력 중 · 잠수방지 대기 중"
+					: footerMessage
+			}
+
 			function setFooterMessage(text) {
-				const el = document.getElementById("footer-message")
-				el.textContent = text
+				footerMessage = text
+				renderFooterMessage()
 				clearTimeout(footerTimer)
-				footerTimer = setTimeout(() => (el.textContent = ""), 5000)
+				footerTimer = setTimeout(() => {
+					footerMessage = ""
+					renderFooterMessage()
+				}, 5000)
 			}
 
 			function setImeState(state) {
@@ -584,7 +598,7 @@
 			</div>
 		</div>
 
-		<p id="footer-message" class="absolute bottom-1.5 left-0 right-0 text-center text-xs text-base-content/50 pointer-events-none z-10"></p>
+		<p id="footer-message" role="status" aria-live="polite" class="absolute bottom-1.5 left-0 right-0 text-center text-xs text-base-content/50 pointer-events-none z-10"></p>
 
 		<div
 			class="absolute top-0 left-0 right-0 h-7 cursor-move z-20"
