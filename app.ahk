@@ -2,7 +2,7 @@
 ;@Ahk2Exe-SetName 딘 로블록스 도우미
 ;@Ahk2Exe-SetProductName 딘 로블록스 도우미
 ;@Ahk2Exe-SetDescription DEAN ROBLOX
-;@Ahk2Exe-SetVersion 1.12.0.0
+;@Ahk2Exe-SetVersion 1.13.0.0
 ;@Ahk2Exe-SetCompanyName Roblox_DEAN
 ;@Ahk2Exe-SetCopyright Roblox_DEAN
 #SingleInstance force
@@ -294,7 +294,9 @@ DoJump() {
 	try {
 		if !afkPendingWindows.Count
 			afkPendingWindows := targetWindows.Clone()
-		keys := jumpKey = "Movement" ? ["Space", "a", "s", "d", "w", "Space"] : [jumpKey]
+		action := jumpKey
+		keys := action = "Movement" ? ["Space", "a", "s", "d", "w"]
+			: action = "Respawn" ? ["Esc", "r", "Enter"] : [action]
 		count := jumpCount
 		keyHoldMs := jumpKey = "Movement" ? 80 : holdMs
 		for hwnd, pid in afkPendingWindows.Clone() {
@@ -319,14 +321,18 @@ DoJump() {
 				Sleep(150)
 				completed := true
 				Loop count {
-					for key in keys {
+					for keyIndex, key in keys {
 						if !running || !WinActive("ahk_id " hwnd) {
 							completed := false
 							break
 						}
+						keyHoldMs := action = "Movement" ? (key = "Space" ? 80 : 200) : holdMs
 						SendEvent("{" key " down}")
 						try Sleep(keyHoldMs)
 						finally SendEvent("{" key " up}")
+						; 메뉴와 확인창이 열린 뒤 다음 키를 보냅니다.
+						if action = "Respawn" && keyIndex < keys.Length
+							Sleep(300)
 					}
 					if !completed
 						break
