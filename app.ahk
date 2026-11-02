@@ -2,7 +2,7 @@
 ;@Ahk2Exe-SetName 딘 로블록스 도우미
 ;@Ahk2Exe-SetProductName 딘 로블록스 도우미
 ;@Ahk2Exe-SetDescription DEAN ROBLOX
-;@Ahk2Exe-SetVersion 1.17.0.0
+;@Ahk2Exe-SetVersion 1.18.0.0
 ;@Ahk2Exe-SetCompanyName Roblox_DEAN
 ;@Ahk2Exe-SetCopyright Roblox_DEAN
 #SingleInstance force
@@ -357,7 +357,7 @@ DoJump(protectionCycle := false) {
 						finally SendEvent("{" key " up}")
 						; 메뉴와 확인창이 열린 뒤 다음 키를 보냅니다.
 						if action = "Respawn" && keyIndex < keys.Length
-							Sleep(900)
+							Sleep(1800)
 					}
 					if !completed
 						break

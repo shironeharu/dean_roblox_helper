@@ -228,7 +228,7 @@ class RobberyProtection {
 				try Sleep(150)
 				finally SendEvent("{" key " up}")
 				if keyIndex < 3
-					Sleep(900)
+					Sleep(1800)
 			}
 			this.Count += 1
 			SendStatus()
