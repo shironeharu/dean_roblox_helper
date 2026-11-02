@@ -2,7 +2,7 @@
 ;@Ahk2Exe-SetName 딘 로블록스 도우미
 ;@Ahk2Exe-SetProductName 딘 로블록스 도우미
 ;@Ahk2Exe-SetDescription DEAN ROBLOX
-;@Ahk2Exe-SetVersion 1.11.0.0
+;@Ahk2Exe-SetVersion 1.12.0.0
 ;@Ahk2Exe-SetCompanyName Roblox_DEAN
 ;@Ahk2Exe-SetCopyright Roblox_DEAN
 #SingleInstance force
@@ -294,7 +294,7 @@ DoJump() {
 	try {
 		if !afkPendingWindows.Count
 			afkPendingWindows := targetWindows.Clone()
-		keys := jumpKey = "Movement" ? ["a", "s", "d", "w"] : [jumpKey]
+		keys := jumpKey = "Movement" ? ["Space", "a", "s", "d", "w", "Space"] : [jumpKey]
 		count := jumpCount
 		keyHoldMs := jumpKey = "Movement" ? 80 : holdMs
 		for hwnd, pid in afkPendingWindows.Clone() {
