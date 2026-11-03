@@ -2,7 +2,7 @@
 ;@Ahk2Exe-SetName 딘 로블록스 도우미
 ;@Ahk2Exe-SetProductName 딘 로블록스 도우미
 ;@Ahk2Exe-SetDescription DEAN ROBLOX
-;@Ahk2Exe-SetVersion 1.18.0.0
+;@Ahk2Exe-SetVersion 1.19.0.0
 ;@Ahk2Exe-SetCompanyName Roblox_DEAN
 ;@Ahk2Exe-SetCopyright Roblox_DEAN
 #SingleInstance force
@@ -31,6 +31,7 @@ SetWinDelay(-1)
 #Include ./pc-recorder.ahk
 #Include ./vendor/FindText.ahk
 #Include ./robbery-patterns.ahk
+#Include ./warning-matcher.ahk
 #Include ./robbery-protection.ahk
 
 ConfigFile   := AppDir "\setting.dean"

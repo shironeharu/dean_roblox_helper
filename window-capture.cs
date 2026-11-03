@@ -4,8 +4,9 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
 
-// One capture per process: the UI can terminate a stalled PrintWindow call.
+// A reusable worker per window; the UI can still terminate a stalled capture.
 internal static class WindowCapture {
     [StructLayout(LayoutKind.Sequential)] struct Rect { public int Left, Top, Right, Bottom; }
     [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
@@ -23,12 +24,33 @@ internal static class WindowCapture {
     }
 
     [STAThread] static int Main(string[] args) {
-        if (args.Length != 3) return 2;
+        if (args.Length != 3 && (args.Length != 5 || args[3] != "--serve")) return 2;
         try {
             SetProcessDPIAware();
             IntPtr hwnd = new IntPtr(Int64.Parse(args[0]));
             uint pid = UInt32.Parse(args[1]);
             string path = Path.GetFullPath(args[2]);
+            if (args.Length == 3) return Capture(hwnd, pid, path);
+            using (Process parent = Process.GetProcessById(Int32.Parse(args[4]))) {
+                // Acquire the parent's handle now so PID reuse cannot keep an orphan alive.
+                IntPtr parentHandle = parent.Handle;
+                DateTime lastRequest = DateTime.UtcNow;
+                DateTime retireAt = lastRequest.AddSeconds(1800 + (hwnd.ToInt64() & 255));
+                while (!parent.HasExited && DateTime.UtcNow < retireAt && (DateTime.UtcNow - lastRequest).TotalSeconds < 30) {
+                    if (!File.Exists(path + ".request")) { Thread.Sleep(25); continue; }
+                    File.Delete(path + ".request");
+                    lastRequest = DateTime.UtcNow;
+                    int result = Capture(hwnd, pid, path);
+                    File.WriteAllText(path + ".result.tmp", result.ToString());
+                    File.Move(path + ".result.tmp", path + ".result");
+                }
+            }
+            return 0;
+        } catch { return 7; }
+    }
+
+    static int Capture(IntPtr hwnd, uint pid, string path) {
+        try {
             if (!IsTarget(hwnd, pid) || IsIconic(hwnd)) return 3;
             Rect rect;
             if (!GetClientRect(hwnd, out rect)) return 4;
