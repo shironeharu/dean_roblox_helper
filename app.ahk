@@ -1,8 +1,8 @@
-﻿#Requires AutoHotkey v2.0 64-bit
+#Requires AutoHotkey v2.0 64-bit
 ;@Ahk2Exe-SetName 딘 로블록스 도우미
 ;@Ahk2Exe-SetProductName 딘 로블록스 도우미
 ;@Ahk2Exe-SetDescription DEAN ROBLOX
-;@Ahk2Exe-SetVersion 1.20.0.0
+;@Ahk2Exe-SetVersion 1.21.0.0
 ;@Ahk2Exe-SetCompanyName Roblox_DEAN
 ;@Ahk2Exe-SetCopyright Roblox_DEAN
 #SingleInstance force
@@ -23,6 +23,7 @@ if (CoreMode) {
 	SetWorkingDir(A_ScriptDir)
 }
 
+#Include webview\WebViewToo.ahk
 #Include ./device-access.ahk
 if !DeviceAccess.Require()
 	ExitApp(1)
@@ -30,7 +31,6 @@ if !DeviceAccess.Require()
 OnExit(trueExit)
 SetWinDelay(-1)
 
-#Include webview\WebViewToo.ahk
 #Include ./session-unlocker.ahk
 #Include ./pc-recorder.ahk
 #Include ./vendor/FindText.ahk
@@ -110,6 +110,7 @@ if (CoreMode) {
 
 DllCall("shell32\SetCurrentProcessExplicitAppUserModelID", "wstr", "DEAN.ROBLOX.Helper", "int")
 MyGui := WebViewGui("-Resize -Caption", "DEAN ROBLOX",, WebViewSettings)
+MyGui.AreDefaultContextMenusEnabled := false
 MyGui.OnEvent("Close", mygui_Close)
 MyGui.IsParentWindowDraggingEnabled := true
 if (CoreMode)

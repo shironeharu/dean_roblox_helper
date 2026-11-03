@@ -1,6 +1,6 @@
 ; Only a derived PC ID is displayed. Raw drive/Windows identifiers never leave this PC.
 class DeviceAccess {
-	static Url := "https://raw.githubusercontent.com/shironeharu/dean_roblox_helper/main/access/allowlist.txt"
+	static Url := "https://api.github.com/repos/shironeharu/dean_roblox_helper/contents/access/allowlist.txt?ref=main"
 	static PcId := ""
 	static Allowed := false
 	static Name := ""
@@ -14,6 +14,8 @@ class DeviceAccess {
 	static StartupRequest := false
 	static Gate := 0
 	static GateCancelled := false
+	static GateMessage := ""
+	static GateBusy := false
 	static OnChanged := 0
 	static OnRevoked := 0
 
@@ -59,31 +61,45 @@ class DeviceAccess {
 
 	static Require() {
 		this.GateCancelled := false
+		this.Allowed := false
+		this.Gate := 0
 		try this.PcId := this.DeviceId()
 		catch {
 			MsgBox("PC ID를 읽을 수 없습니다. 관리자 권한과 시스템 드라이브를 확인해 주세요.", "DEAN ROBLOX", "Iconx")
 			return false
 		}
-		this.Gate := Gui("-MaximizeBox -MinimizeBox", "DEAN ROBLOX · PC 인증")
+		; Check before creating a window so approved PCs never flash the login form.
+		this.StartRequest(true)
+		while this.GateBusy
+			Sleep(50)
+		if this.Allowed
+			return true
+		this.GateMessage := ""
+		return this.ShowGate()
+	}
+
+	static ShowGate() {
+		global CoreMode
+		settings := {}
+		if CoreMode
+			settings := {DllPath: A_Args[3], DataDir: EnvGet("LOCALAPPDATA") "\DEAN_ROBLOX\webview"}
+		else if A_IsCompiled {
+			WebViewCtrl.CreateFileFromResource("64bit\WebView2Loader.dll", WebViewCtrl.TempDir)
+			settings := {DllPath: WebViewCtrl.TempDir "\64bit\WebView2Loader.dll"}
+		}
+		this.Gate := WebViewGui("-Resize -Caption", "DEAN ROBLOX · PC 인증", , settings)
 		gateWindow := this.Gate
-		gateWindow.BackColor := "1D1C23"
-		gateWindow.SetFont("s16 Bold cCBB9EF", "Segoe UI")
-		gateWindow.AddText("x24 y20 w332 h32 Center", "DEAN ROBLOX")
-		gateWindow.SetFont("s10 Norm cEFEcf5")
-		gateWindow.AddText("x24 y62 w332 h22 Center", "등록된 PC만 사용할 수 있습니다")
-		gateWindow.AddText("x24 y98 w332 h20", "내 PC ID")
-		gateWindow.SetFont("s9", "Consolas")
-		gateWindow.AddEdit("x24 y121 w332 h28 ReadOnly cEFEcf5 Background29282F", this.PcId)
-		gateWindow.SetFont("s10", "Segoe UI")
-		gateWindow.AddButton("x24 y159 w100 h30", "ID 복사").OnEvent("Click", ObjBindMethod(this, "CopyId"))
-		gateWindow.AddText("x24 y204 w332 h40", "Discord: ddu._.`n등록 요청은 PC ID와 함께 DM 주세요.")
-		this.StatusLabel := gateWindow.AddText("x24 y252 w332 h44 cCBB9EF", "PC ID를 등록받은 뒤 로그인해 주세요.")
-		this.LoginButton := gateWindow.AddButton("x24 y305 w210 h34 Default", "로그인")
-		this.LoginButton.OnEvent("Click", (*) => this.StartRequest(true))
-		gateWindow.AddButton("x246 y305 w110 h34", "종료").OnEvent("Click", ObjBindMethod(this, "CancelGate"))
+		gateWindow.AreDefaultContextMenusEnabled := false
+		gateWindow.IsParentWindowDraggingEnabled := true
+		gateWindow.AddCallbackToScript("GetLoginState", (*) => this.PostGate())
+		gateWindow.AddCallbackToScript("Login", (*) => this.StartRequest(true))
+		gateWindow.AddCallbackToScript("CopyPcId", ObjBindMethod(this, "CopyId"))
+		gateWindow.AddCallbackToScript("ExitLogin", ObjBindMethod(this, "CancelGate"))
 		gateWindow.OnEvent("Close", ObjBindMethod(this, "CancelGate"))
-		gateWindow.OnEvent("Escape", ObjBindMethod(this, "CancelGate"))
-		gateWindow.Show("w380 h360")
+		if CoreMode
+			gateWindow.BrowseFolder(A_Args[2])
+		gateWindow.Navigate(CoreMode || A_IsCompiled ? "login.html" : "http://localhost:5173/login.html")
+		gateWindow.Show("w380 h536")
 		WinWaitClose("ahk_id " gateWindow.Hwnd)
 		this.Gate := 0
 		return this.Allowed
@@ -91,7 +107,17 @@ class DeviceAccess {
 
 	static CopyId(*) {
 		A_Clipboard := this.PcId
-		this.StatusLabel.Text := "PC ID가 복사되었습니다. ddu._.에게 DM 주세요."
+	}
+
+	static UpdateGate(message, busy := false) {
+		this.GateMessage := message
+		this.GateBusy := busy
+		this.PostGate()
+	}
+
+	static PostGate() {
+		if IsObject(this.Gate) && HasMethod(this.Gate, "PostWebMessageAsJson")
+			this.Gate.PostWebMessageAsJson('{"type":"loginState","content":{"pcId":"' this.PcId '","message":"' this.GateMessage '","busy":' (this.GateBusy ? "true" : "false") '}}')
 	}
 
 	static CancelGate(*) {
@@ -110,14 +136,14 @@ class DeviceAccess {
 			return
 		this.StartupRequest := startup
 		if startup {
-			this.LoginButton.Enabled := false
-			this.StatusLabel.Text := "등록 상태를 확인하고 있습니다…"
+			this.UpdateGate("", true)
 		}
 		try {
 			req := ComObject("WinHttp.WinHttpRequest.5.1")
 			req.SetTimeouts(3000, 3000, 3000, 3000)
-			req.Open("GET", this.Url "?t=" this.Tick(), true)
+			req.Open("GET", this.Url "&v=" A_NowUTC "-" this.Tick() "-" Random(100000, 999999), true)
 			req.SetRequestHeader("Cache-Control", "no-cache")
+			req.SetRequestHeader("Accept", "application/vnd.github.raw+json")
 			req.SetRequestHeader("User-Agent", "DEAN-ROBLOX-Access")
 			this.Request := req
 			this.RequestStarted := this.Tick()
@@ -149,8 +175,7 @@ class DeviceAccess {
 				return
 			if !verdict.Allowed {
 				if this.StartupRequest {
-					this.LoginButton.Enabled := true
-					this.StatusLabel.Text := verdict.Message
+					this.UpdateGate("등록되지 않은 PC 입니다")
 				} else
 					this.Revoke(verdict.Message)
 				return
@@ -163,7 +188,9 @@ class DeviceAccess {
 			this.LastSuccess := this.Tick()
 			this.NextCheck := this.Tick() + 600000
 			if this.StartupRequest {
-				this.Gate.Destroy()
+				this.GateBusy := false
+				if IsObject(this.Gate)
+					this.Gate.Destroy()
 			} else if IsObject(this.OnChanged) {
 				callback := this.OnChanged
 				callback.Call()
@@ -178,9 +205,8 @@ class DeviceAccess {
 	}
 
 	static NetworkFailure() {
-		if this.StartupRequest && IsObject(this.Gate) {
-			this.LoginButton.Enabled := true
-			this.StatusLabel.Text := "등록 확인에 실패했습니다. 인터넷 연결 후 다시 로그인해 주세요."
+		if this.StartupRequest {
+			this.UpdateGate("등록되지 않은 PC 입니다")
 		}
 	}
 

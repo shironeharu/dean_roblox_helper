@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ko">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<link rel="stylesheet" href="./src/app.css" />
+		<title>DEAN ROBLOX · PC 인증</title>
+		<script>
+			window.chrome.webview.addEventListener("message", ({ data }) => {
+				if (data?.type !== "loginState") return
+				const state = data.content
+				document.getElementById("pc-id").textContent = state.pcId
+					const message = document.getElementById("login-message")
+					message.textContent = state.message
+					message.hidden = !state.message
+				const button = document.getElementById("login-button")
+				button.disabled = state.busy
+				button.textContent = state.busy ? "확인 중…" : "로그인"
+			})
+			window.addEventListener("DOMContentLoaded", () => ahk.GetLoginState())
+			document.addEventListener("keydown", (event) => {
+				if (event.key === "Enter" && !document.getElementById("login-button").disabled) ahk.Login()
+				if (event.key === "Escape") ahk.ExitLogin()
+			})
+		</script>
+	</head>
+	<body class="overflow-hidden h-screen w-screen relative select-none bg-base-100">
+		<div class="absolute inset-0 overflow-hidden pointer-events-none">
+			<div class="absolute -top-20 -left-16 w-56 h-56 rounded-full bg-primary/30 blur-3xl"></div>
+			<div class="absolute -bottom-20 -right-16 w-64 h-64 rounded-full bg-accent/30 blur-3xl"></div>
+		</div>
+		<main class="relative flex flex-col h-full w-full items-center gap-3 px-5 pb-5 pt-8">
+			<header class="flex flex-col items-center gap-1">
+				<h1 class="text-xl font-bold text-primary">DEAN ROBLOX</h1>
+				<p class="text-xs text-base-content/60">딘이 만든 로블록스 보조도구</p>
+			</header>
+			<div class="h-8 flex items-center gap-2 text-sm text-primary/90">
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" class="w-4 h-4" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><path d="M12 14v3"/></svg>
+				<span>PC 등록 시스템</span>
+			</div>
+			<section class="card relative w-80 h-[368px] bg-base-100/40 backdrop-blur-xl border border-white/10 shadow-2xl">
+				<div class="card-body p-4 gap-3 min-h-0">
+					<div class="flex justify-between items-center">
+						<h2 class="text-sm text-base-content/80">DEAN SYSTEM</h2>
+						<span class="badge badge-sm badge-outline text-[#f08080] border-[#f08080]/40 text-[10px]">미등록된 PC 입니다</span>
+					</div>
+					<div class="flex flex-col gap-2">
+						<div class="flex items-center justify-between">
+							<span class="text-xs text-base-content/60">YOUR PCID</span>
+							<button class="btn btn-ghost btn-xs text-primary" onclick="ahk.CopyPcId()">ID 복사</button>
+						</div>
+						<code id="pc-id" class="rounded-box bg-base-300 px-3 py-2 text-[11px] leading-relaxed text-base-content/85 break-all select-text font-mono">PC ID를 불러오는 중…</code>
+					</div>
+					<div class="rounded-box border border-primary/15 bg-primary/5 px-3 py-4 text-center flex-1 min-h-0 flex flex-col items-center justify-center">
+						<div class="flex-none">
+							<p class="text-sm text-primary">디스코드 <span class="font-bold select-text">ddu._.</span></p>
+							<p class="text-[11px] text-base-content/50 mt-2 leading-relaxed">PCID를 복사해서 DM으로 보내주세요</p>
+						</div>
+					</div>
+					<button id="login-button" class="btn btn-primary w-full shrink-0" onclick="ahk.Login()">로그인</button>
+				</div>
+				<p id="login-message" class="absolute top-full mt-1 inset-x-0 text-[10px] text-[#f08080] text-center leading-3" role="status" aria-live="polite" hidden></p>
+			</section>
+		</main>
+		<div class="absolute top-0 left-0 right-0 h-7 cursor-move z-20" onmousedown="ahk.DragParentWindow()" title="드래그해서 이동"></div>
+		<button onclick="ahk.ExitLogin()" class="btn btn-square btn-sm btn-ghost absolute top-1.5 right-1.5 z-30" title="닫기">✕</button>
+	</body>
+</html>

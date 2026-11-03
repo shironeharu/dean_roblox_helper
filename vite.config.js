@@ -11,6 +11,7 @@ export default defineConfig({
 		outDir: "../dist",
 		emptyOutDir: true,
 		rollupOptions: {
+			input: { main: "frontend/index.html", login: "frontend/login.html" },
 			output: {
 				// fixed name for the main JavaScript bundle
 				entryFileNames: "assets/app.js",
