@@ -3,6 +3,8 @@ class RobberyProtection {
 	static Active := false
 	static Busy := false
 	static Count := 0
+	static PendingRespawns := Map()
+	static CurrentInput := 0
 	static States := Map()
 	static Jobs := Map()
 	static Workers := Map()
@@ -42,6 +44,7 @@ class RobberyProtection {
 		this.Count := 0
 		this.Active := true
 		SetTimer(RobberyProtectionTick, 100)
+		SetTimer(ProtectionRespawnTick, 25)
 		this.NextJumpTick := A_TickCount + 300000
 		SetTimer(ProtectionHeartbeat, 1000)
 	}
@@ -49,6 +52,8 @@ class RobberyProtection {
 	static Stop() {
 		this.Active := false
 		SetTimer(RobberyProtectionTick, 0)
+		SetTimer(ProtectionRespawnTick, 0)
+		this.CancelRespawns()
 		SetTimer(ProtectionHeartbeat, 0)
 		this.StopMatcher()
 		for hwnd, job in this.Jobs
@@ -64,10 +69,10 @@ class RobberyProtection {
 
 	static Scan() {
 		global running, targetWindows, afkInputBusy
-		if !this.Active || !running || this.Busy || afkInputBusy || PcRecorder.Busy
+		if !this.Active || !running || this.Busy || PcRecorder.Busy
 			return
 		; 점프 시간이 되면 다음 캡처보다 먼저 처리합니다.
-		if A_TickCount >= this.NextJumpTick {
+		if A_TickCount >= this.NextJumpTick && !afkInputBusy && !this.PendingRespawns.Count {
 			ProtectionHeartbeat()
 			return
 		}
@@ -88,7 +93,15 @@ class RobberyProtection {
 						continue
 					}
 					if !FileExist(job.Path ".match.result") {
-						if A_TickCount - job.MatchStart < 2500
+						if FileExist(job.Path ".match.started") {
+							if !job.HasOwnProp("MatchingSince")
+								job.MatchingSince := A_TickCount
+							waiting := A_TickCount - job.MatchingSince < 2500
+						} else {
+							; 검색 대기를 검색 중 멈춤으로 취급하지 않으며 창 수에 따라 대기 상한을 둡니다.
+							waiting := A_TickCount - job.MatchStart < Max(5000, targetWindows.Count * 2500 + 1000)
+						}
+						if waiting
 							continue
 						this.ResetMatcher()
 						break
@@ -100,8 +113,11 @@ class RobberyProtection {
 						if this.CaptureErrors.Has(hwnd)
 							this.CaptureErrors.Delete(hwnd)
 						this.CheckFrame(hwnd, job)
-					} else
+					} else {
+						if !this.CaptureErrors.Has(hwnd)
+							this.Trace("capture failed HWND " hwnd " code " exitCode)
 						this.CaptureErrors[hwnd] := true
+					}
 				} catch as e {
 					this.CaptureErrors[hwnd] := true
 					this.Trace("HWND " hwnd ": " e.Message)
@@ -282,7 +298,7 @@ class RobberyProtection {
 	}
 
 	static CleanFiles(path) {
-		for extension in [".bmp", ".jpg", ".ready", ".request", ".result", ".request.tmp", ".result.tmp", ".match.request", ".match.request.tmp", ".match.tmp", ".match.result"]
+		for extension in [".bmp", ".jpg", ".ready", ".request", ".result", ".request.tmp", ".result.tmp", ".match.request", ".match.request.tmp", ".match.tmp", ".match.result", ".match.started"]
 			if FileExist(path extension)
 				try FileDelete(path extension)
 	}
@@ -305,6 +321,8 @@ class RobberyProtection {
 			return
 		}
 		state.Missing := 0
+		if !state.Latched && A_TickCount - state.Last >= 10000
+			this.Respawn(hwnd, job.Pid, state)
 		if !state.Saved && A_TickCount - state.Last >= 10000 {
 			folder := AppDir "\소매치기 범인"
 			DirCreate(folder)
@@ -320,44 +338,112 @@ class RobberyProtection {
 			FileMove(job.Path ".jpg", filename)
 			state.Saved := true
 		}
-		if state.Latched || A_TickCount - state.Last < 10000
-			return
-		this.Respawn(hwnd, job.Pid, state)
 	}
 
 	static FindWarning(x1, y1, x2, y2, screenshot := 1) => WarningMatcher.Find(x1, y1, x2, y2, screenshot)
 
 	static Respawn(hwnd, pid, state) {
-		global running, afkInputBusy
-		previous := WinExist("A")
-		afkInputBusy := true
-		try {
-			WinActivate("ahk_id " hwnd)
-			if !WinWaitActive("ahk_id " hwnd, , 1)
-				return
-			Sleep(450)
-			for keyIndex, key in ["Esc", "r", "Enter"] {
-				if !running || !this.Active || PcRecorder.Busy || !WinActive("ahk_id " hwnd)
-					return
-				if WinGetPID("ahk_id " hwnd) != pid || WinGetProcessName("ahk_id " hwnd) != "RobloxPlayerBeta.exe"
-					return
-				; 중간에 사용자가 개입해도 Esc를 반복해 메뉴를 토글하지 않습니다.
-				state.Latched := true
-				state.Last := A_TickCount
-				SendEvent("{" key " down}")
-				try Sleep(150)
-				finally SendEvent("{" key " up}")
-				if keyIndex < 3
-					Sleep(1800)
-			}
-			this.Count += 1
-			SendStatus()
-		} finally {
-			if previous && WinExist("ahk_id " previous) && WinActive("ahk_id " hwnd)
-				try WinActivate("ahk_id " previous)
-			afkInputBusy := false
+		if !this.PendingRespawns.Has(hwnd) {
+			this.PendingRespawns[hwnd] := {Hwnd: hwnd, Pid: pid, State: state, Index: 1, Due: A_TickCount}
+			this.Trace("warning detected; queued respawn HWND " hwnd " PID " pid)
 		}
+	}
+
+	static ProcessRespawn() {
+		global running, afkInputBusy
+		if !this.Active || !running || PcRecorder.Busy {
+			this.CancelRespawns()
+			return
+		}
+		try {
+			if IsObject(this.CurrentInput) {
+				input := this.CurrentInput
+				job := input.Job
+				if input.Phase = "activate" {
+					if WinActive("ahk_id " job.Hwnd) {
+						input.Phase := "settle"
+						input.Due := A_TickCount + 450
+					} else if A_TickCount >= input.Due {
+						this.ReleaseInput(true)
+					}
+					return
+				}
+				if A_TickCount < input.Due
+					return
+				if !WinActive("ahk_id " job.Hwnd) || !this.ValidTarget(job.Hwnd, job.Pid) {
+					this.ReleaseInput(true)
+					return
+				}
+				if input.Phase = "settle" {
+					key := ["Esc", "r", "Enter"][job.Index]
+					input.Key := key
+					SendEvent("{" key " down}")
+					job.State.Latched := true
+					job.State.Last := A_TickCount
+					input.Phase := "up"
+					input.Due := A_TickCount + 150
+				} else {
+					SendEvent("{" input.Key " up}")
+					input.Key := ""
+					if job.Index = 3 {
+						this.PendingRespawns.Delete(job.Hwnd)
+						this.Count += 1
+						this.Trace("respawn keys completed HWND " job.Hwnd)
+						SendStatus()
+					} else {
+						job.Index += 1
+						job.Due := A_TickCount + 1800
+					}
+					this.ReleaseInput()
+				}
+				return
+			}
+			if this.Busy || afkInputBusy
+				return
+			chosen := 0
+			for hwnd, job in this.PendingRespawns {
+				if A_TickCount >= job.Due && (!IsObject(chosen) || job.Due < chosen.Due)
+					chosen := job
+			}
+			if !IsObject(chosen)
+				return
+			if !this.ValidTarget(chosen.Hwnd, chosen.Pid) {
+				this.PendingRespawns.Delete(chosen.Hwnd)
+				return
+			}
+			this.CurrentInput := {Job: chosen, Previous: WinExist("A"), Phase: "activate", Due: A_TickCount + 1000, Key: ""}
+			afkInputBusy := true
+			WinActivate("ahk_id " chosen.Hwnd)
+		} catch as e {
+			this.Trace("respawn: " e.Message)
+			this.ReleaseInput(true)
+		}
+	}
+
+	static ReleaseInput(cancel := false) {
+		global afkInputBusy
+		if !IsObject(this.CurrentInput)
+			return
+		input := this.CurrentInput
+		this.CurrentInput := 0
+		if input.Key != ""
+			try SendEvent("{" input.Key " up}")
+		if cancel {
+			input.Job.State.Last := A_TickCount
+			this.Trace("respawn interrupted HWND " input.Job.Hwnd)
+			if this.PendingRespawns.Has(input.Job.Hwnd)
+				this.PendingRespawns.Delete(input.Job.Hwnd)
+		}
+		if input.Previous && WinExist("ahk_id " input.Previous) && WinActive("ahk_id " input.Job.Hwnd)
+			try WinActivate("ahk_id " input.Previous)
+		afkInputBusy := false
+	}
+
+	static CancelRespawns() {
+		this.ReleaseInput(true)
+		this.PendingRespawns := Map()
 	}
 }
 
 RobberyProtectionTick(*) => RobberyProtection.Scan()
+ProtectionRespawnTick(*) => RobberyProtection.ProcessRespawn()

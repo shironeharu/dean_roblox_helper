@@ -2,7 +2,7 @@
 ;@Ahk2Exe-SetName 딘 로블록스 도우미
 ;@Ahk2Exe-SetProductName 딘 로블록스 도우미
 ;@Ahk2Exe-SetDescription DEAN ROBLOX
-;@Ahk2Exe-SetVersion 1.19.0.0
+;@Ahk2Exe-SetVersion 1.20.0.0
 ;@Ahk2Exe-SetCompanyName Roblox_DEAN
 ;@Ahk2Exe-SetCopyright Roblox_DEAN
 #SingleInstance force
@@ -296,7 +296,7 @@ ProtectionHeartbeat(*) {
 	global running, afkInputBusy
 	if !running || !RobberyProtection.Active || A_TickCount < RobberyProtection.NextJumpTick
 		return
-	if RobberyProtection.Busy || afkInputBusy || PcRecorder.Busy
+	if RobberyProtection.Busy || RobberyProtection.PendingRespawns.Count || afkInputBusy || PcRecorder.Busy
 		return
 	DoJump(true)
 }

@@ -23,6 +23,7 @@ try {
 			if !RegExMatch(A_LoopFileName, "^\d+\.match\.request$")
 				continue
 			try {
+				FileOpen(path ".match.started", "w").Close()
 				FileDelete(A_LoopFileFullPath)
 				size := StrSplit(FileRead(path ".ready"), ",")
 				width := Integer(size[1]), height := Integer(size[2])
