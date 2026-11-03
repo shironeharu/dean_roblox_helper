@@ -89,6 +89,7 @@ class DeviceAccess {
 		}
 		this.Gate := WebViewGui("-Resize -Caption", "DEAN ROBLOX · PC 인증", , settings)
 		gateWindow := this.Gate
+		ApplyAppWindowIcon(gateWindow)
 		gateWindow.AreDefaultContextMenusEnabled := false
 		gateWindow.IsParentWindowDraggingEnabled := true
 		gateWindow.AddCallbackToScript("GetLoginState", (*) => this.PostGate())
@@ -305,3 +306,29 @@ class DeviceAccess {
 
 DeviceAccessPoll(*) => DeviceAccess.Poll()
 DeviceAccessTick(*) => DeviceAccess.SessionTick()
+
+; Both registration and main windows share the launcher icon.
+ApplyAppWindowIcon(window) {
+	global CoreMode
+	DllCall("shell32\SetCurrentProcessExplicitAppUserModelID", "wstr", "DEAN.ROBLOX.Helper", "int")
+	if (CoreMode || A_IsCompiled) {
+		; dll 스레드가 만든 창에는 아이콘·이름이 자동으로 붙지 않으므로, 이 프로세스를 실행한
+		; 런처 exe의 아이콘을 작업표시줄/창 아이콘으로 직접 지정합니다.
+		; Ahk2Exe 가 /icon 으로 지정한 아이콘은 exe 안의 아이콘 ID 159 자리에 들어갑니다
+		hostModule := DllCall("GetModuleHandleW", "ptr", 0, "ptr")
+		hIconBig := DllCall("LoadImageW", "ptr", hostModule, "ptr", 159, "uint", 1, "int", 32, "int", 32, "uint", 0, "ptr")
+		hIconSmall := DllCall("LoadImageW", "ptr", hostModule, "ptr", 159, "uint", 1, "int", 16, "int", 16, "uint", 0, "ptr")
+	} else {
+		hIconBig := DllCall("LoadImageW", "ptr", 0, "str", A_ScriptDir "\app.ico", "uint", 1, "int", 32, "int", 32, "uint", 0x10, "ptr")
+		hIconSmall := DllCall("LoadImageW", "ptr", 0, "str", A_ScriptDir "\app.ico", "uint", 1, "int", 16, "int", 16, "uint", 0x10, "ptr")
+	}
+	if (hIconBig || hIconSmall) {
+		; 창이 아직 화면에 나오기 전이라 AHK의 SendMessage(숨은 창을 못 찾음) 대신 핸들로 직접 보냄
+		if (hIconBig)
+			DllCall("SendMessageW", "ptr", window.Hwnd, "uint", 0x80, "ptr", 1, "ptr", hIconBig)     ; WM_SETICON, ICON_BIG
+		if (hIconSmall)
+			DllCall("SendMessageW", "ptr", window.Hwnd, "uint", 0x80, "ptr", 0, "ptr", hIconSmall)   ; WM_SETICON, ICON_SMALL
+		TraySetIcon("HICON:" (hIconBig ? hIconBig : hIconSmall))
+	}
+	A_IconTip := "DEAN ROBLOX"
+}

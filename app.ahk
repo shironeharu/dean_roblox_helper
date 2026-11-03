@@ -2,7 +2,7 @@
 ;@Ahk2Exe-SetName 딘 로블록스 도우미
 ;@Ahk2Exe-SetProductName 딘 로블록스 도우미
 ;@Ahk2Exe-SetDescription DEAN ROBLOX
-;@Ahk2Exe-SetVersion 1.21.0.0
+;@Ahk2Exe-SetVersion 1.22.0.0
 ;@Ahk2Exe-SetCompanyName Roblox_DEAN
 ;@Ahk2Exe-SetCopyright Roblox_DEAN
 #SingleInstance force
@@ -115,26 +115,7 @@ MyGui.OnEvent("Close", mygui_Close)
 MyGui.IsParentWindowDraggingEnabled := true
 if (CoreMode)
 	MyGui.BrowseFolder(A_Args[2])   ; 화면 파일이 풀려 있는 폴더를 ahk.localhost 로 연결
-if (CoreMode || A_IsCompiled) {
-	; dll 스레드가 만든 창에는 아이콘·이름이 자동으로 붙지 않으므로, 이 프로세스를 실행한
-	; 런처 exe의 아이콘을 작업표시줄/창 아이콘으로 직접 지정합니다.
-	; Ahk2Exe 가 /icon 으로 지정한 아이콘은 exe 안의 아이콘 ID 159 자리에 들어갑니다
-	hostModule := DllCall("GetModuleHandleW", "ptr", 0, "ptr")
-	hIconBig := DllCall("LoadImageW", "ptr", hostModule, "ptr", 159, "uint", 1, "int", 32, "int", 32, "uint", 0, "ptr")
-	hIconSmall := DllCall("LoadImageW", "ptr", hostModule, "ptr", 159, "uint", 1, "int", 16, "int", 16, "uint", 0, "ptr")
-} else {
-	hIconBig := DllCall("LoadImageW", "ptr", 0, "str", A_ScriptDir "\app.ico", "uint", 1, "int", 32, "int", 32, "uint", 0x10, "ptr")
-	hIconSmall := DllCall("LoadImageW", "ptr", 0, "str", A_ScriptDir "\app.ico", "uint", 1, "int", 16, "int", 16, "uint", 0x10, "ptr")
-}
-if (hIconBig || hIconSmall) {
-	; 창이 아직 화면에 나오기 전이라 AHK의 SendMessage(숨은 창을 못 찾음) 대신 핸들로 직접 보냄
-	if (hIconBig)
-		DllCall("SendMessageW", "ptr", MyGui.Hwnd, "uint", 0x80, "ptr", 1, "ptr", hIconBig)     ; WM_SETICON, ICON_BIG
-	if (hIconSmall)
-		DllCall("SendMessageW", "ptr", MyGui.Hwnd, "uint", 0x80, "ptr", 0, "ptr", hIconSmall)   ; WM_SETICON, ICON_SMALL
-	TraySetIcon("HICON:" (hIconBig ? hIconBig : hIconSmall))
-}
-A_IconTip := "DEAN ROBLOX"
+ApplyAppWindowIcon(MyGui)
 
 MyGui.AddCallbackToScript("GetWindows", WebviewGetWindows)
 MyGui.AddCallbackToScript("Start", WebviewStart)
