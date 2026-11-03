@@ -6,6 +6,12 @@
       "name": "관리자 딘",
       "blocked": true,
       "expires": ""
+    },
+    {
+      "id": "DEAN-C999BBF2-F088C63D-218856B5-0A2406AB",
+      "name": "영짱",
+      "blocked": false,
+      "expires": ""
     }
   ]
 }
