@@ -117,3 +117,5 @@ No test framework is configured. Verify changes manually by running `npm run dev
 
 - 감지 후 리스폰은 25ms 타이머의 창별 단계 큐로 처리합니다. 키 누름 150ms·키 사이 최소 1800ms를 유지하며 기다리는 사이 다른 창의 단계를 처리합니다. 키 입력 중에도 캡처·검색은 계속하며 300초 점프는 열린 리스폰 단계가 끝나면 진행합니다. 중단/포커스 이탈 시 키를 해제하고 기한을 보존합니다. 사진 저장 실패가 리스폰 큐 등록을 막지 않으며 감지/입력 완료/중단은 protection.log에 기록합니다.
 - 검색 제한은 큐 대기와 실제 검색을 구분합니다. `.match.started` 이후 2.5초를 검색 제한으로 적용하고, 시작 전 큐 대기는 최대 5초 또는 창수×2.5초+1초로 제한합니다. 대기 프레임을 무조건 2.5초에 폐기하지 않습니다.
+
+- PC 인증: `device-access.ahk`의 로그인 폼은 WebView·녹화·게임 핫키 초기화 전에 표시합니다. 시스템 볼륨 ID와 MachineGuid의 해시만 사용합니다. GitHub `access/allowlist.txt`를 비동기로 확인하고 승인된 이름을 앱 상단에 표시합니다. `manage-access.yml`의 workflow_dispatch로 이름·차단·KST 만료일을 관리하며 `scripts/manage-access.mjs`가 등록 JSON과 ASCII/B64 앱 목록을 함께 갱신합니다. 실행 중 재확인 10분/통신 실패 유예 최대 30분이며 명시적 차단·만료는 중단합니다. 초기 목록은 빈 상태이며 자동 승인이나 개발용 우회가 없습니다. 상세 운영은 `access/README.md`, 관리 검증은 `node --test scripts/manage-access.test.mjs`를 사용합니다.

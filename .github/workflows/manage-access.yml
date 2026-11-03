@@ -1,0 +1,62 @@
+name: PC 등록 · 차단 관리
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 작업 선택
+        type: choice
+        options: [upsert, block, unblock, list]
+        default: upsert
+      pc_id:
+        description: 사용자가 복사해서 전달한 PC ID (list는 빈칸)
+        type: string
+      name:
+        description: 앱 상단 표시 이름 (등록/수정 시 필수, 공개되는 닉네임)
+        type: string
+      expires:
+        description: 만료일 YYYY-MM-DD (해당 날짜 한국시간 23:59:59까지, 빈칸은 무기한)
+        type: string
+      blocked:
+        description: 등록/수정 시 차단 상태
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pc-access-registry
+  cancel-in-progress: false
+
+jobs:
+  manage:
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: 등록 목록 갱신
+        env:
+          ACCESS_ACTION: ${{ inputs.action }}
+          ACCESS_PC_ID: ${{ inputs.pc_id }}
+          ACCESS_NAME: ${{ inputs.name }}
+          ACCESS_EXPIRES: ${{ inputs.expires }}
+          ACCESS_BLOCKED: ${{ inputs.blocked }}
+        run: node scripts/manage-access.mjs
+      - name: 변경 저장
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add access/registry.json access/allowlist.txt
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Update PC access registry"
+          git pull --rebase origin "$DEFAULT_BRANCH"
+          git push origin "HEAD:$DEFAULT_BRANCH"

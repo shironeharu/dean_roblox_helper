@@ -16,6 +16,10 @@
 				if (!data || typeof data !== "object" || !data.type) return
 
 				switch (data.type) {
+					case "accessInfo":
+						document.getElementById("access-name").textContent = data.content.name
+						document.getElementById("access-name").title = data.content.name + " · " + data.content.expires
+						break
 					case "recorderState":
 						renderRecorderState(data.content)
 						break
@@ -386,6 +390,7 @@
 				refreshWindows()
 				ahk.GetChatState()
 				ahk.GetAfkConfig()
+				ahk.GetAccessInfo()
 				ahk.GetClickConfig()
 				ahk.GetMultiState()
 				ahk.GetRecorderState()
@@ -396,6 +401,7 @@
 		</script>
 	</head>
 	<body class="overflow-hidden h-screen w-screen relative select-none bg-base-100">
+		<span id="access-name" class="absolute top-2 left-3 z-30 max-w-64 truncate text-xs text-primary" aria-label="등록 이름"></span>
 		<div class="absolute inset-0 overflow-hidden pointer-events-none">
 			<div class="absolute -top-20 -left-16 w-56 h-56 rounded-full bg-primary/30 blur-3xl"></div>
 			<div class="absolute -bottom-20 -right-16 w-64 h-64 rounded-full bg-accent/30 blur-3xl"></div>

@@ -23,6 +23,10 @@ if (CoreMode) {
 	SetWorkingDir(A_ScriptDir)
 }
 
+#Include ./device-access.ahk
+if !DeviceAccess.Require()
+	ExitApp(1)
+
 OnExit(trueExit)
 SetWinDelay(-1)
 
@@ -136,6 +140,7 @@ MyGui.AddCallbackToScript("Start", WebviewStart)
 MyGui.AddCallbackToScript("Stop", WebviewStop)
 MyGui.AddCallbackToScript("Exit", WebviewExit)
 MyGui.AddCallbackToScript("GetAfkConfig", WebviewGetAfkConfig)
+MyGui.AddCallbackToScript("GetAccessInfo", WebviewGetAccessInfo)
 MyGui.AddCallbackToScript("SetJumpKey", WebviewSetJumpKey)
 MyGui.AddCallbackToScript("SetJumpCount", WebviewSetJumpCount)
 MyGui.AddCallbackToScript("SetAfkInterval", WebviewSetAfkInterval)
@@ -171,7 +176,40 @@ ApplyChatEnabled(chatEnabled)
 SetupClickHotkeys()
 PcRecorder.Init()
 SetTimer(PollImeState, 400)
+DeviceAccess.OnChanged := (*) => WebviewGetAccessInfo(0)
+DeviceAccess.OnRevoked := HandleAccessRevoked
+DeviceAccess.BeginSession()
 return
+
+WebviewGetAccessInfo(webview, *) {
+	expires := DeviceAccess.Expires = "-" ? "무기한" : FormatTime(DateAdd(DeviceAccess.Expires, 9, "Hours"), "yyyy-MM-dd")
+	MyGui.PostWebMessageAsJson('{"type":"accessInfo","content":{"name":"' JsonEscape(DeviceAccess.Name) '","expires":"' expires '"}}')
+}
+
+HandleAccessRevoked(message) {
+	global holdOn, macroOn, AccessClosingMessage
+	AccessClosingMessage := message
+	WebviewStop(0)
+	if PcRecorder.Busy
+		PcRecorder.Stop()
+	holdOn := false, macroOn := false
+	SetTimer(MacroClickTick, 0)
+	ApplyChatEnabled(false)
+	HotIf()
+	for action, key in PcRecorder.Keys
+		try Hotkey("$*" key, "Off")
+	MyGui.Hide()
+	SetTimer(CloseRevokedAccess, 100)
+}
+
+CloseRevokedAccess() {
+	global afkInputBusy, AccessClosingMessage
+	if afkInputBusy
+		return
+	SetTimer(CloseRevokedAccess, 0)
+	MsgBox(AccessClosingMessage, "DEAN ROBLOX · 인증 종료", "Iconx")
+	ExitApp(1)
+}
 
 ; ---------------- 로블록스 창 목록 ----------------
 WebviewGetWindows(webview, *) {
@@ -893,6 +931,7 @@ mygui_Close(*) {
 	trueExit(0, 0)
 }
 trueExit(ExitReason, ExitCode){
+	DeviceAccess.Shutdown()
 	RobberyProtection.Dispose()
 	if PcRecorder.Busy
 		PcRecorder.Stop()
@@ -903,7 +942,7 @@ trueExit(ExitReason, ExitCode){
 
 ;@Ahk2Exe-IgnoreBegin
 ; For dev
-#HotIf !PcRecorder.Busy && !PcRecorder.UsesKey("F6")
+#HotIf DeviceAccess.Allowed && !PcRecorder.Busy && !PcRecorder.UsesKey("F6")
 F6::ExitApp(5173)
 #HotIf
 ;@Ahk2Exe-IgnoreEnd
