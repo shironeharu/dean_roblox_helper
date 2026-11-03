@@ -4,7 +4,7 @@
     {
       "id": "DEAN-21220D7E-8A869AE9-0E201C78-82727F81",
       "name": "관리자 딘",
-      "blocked": false,
+      "blocked": true,
       "expires": ""
     }
   ]
