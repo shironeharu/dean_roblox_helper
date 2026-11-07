@@ -34,7 +34,7 @@
 						document.getElementById("shortcut-summary").textContent = `${data.content.modifier} + 숫자`
 						break
 					case "shortcutStatus":
-						document.getElementById("shortcut-status").textContent = data.content
+						setFooterMessage(data.content)
 						break
 					case "multiState":
 						renderMultiState(data.content)
@@ -500,7 +500,6 @@
 						</span>
 					</label>
 					<button class="btn btn-primary w-full mt-auto shrink-0" onclick="ahk.OpenShortcutSettings()">문구 및 조합 키 설정</button>
-					<p id="shortcut-status" class="flex-none text-xs text-center text-base-content/60 empty:hidden" role="status" aria-live="polite"></p>
 				</div>
 			</div>
 
@@ -709,7 +708,7 @@
 			</div>
 		</div>
 
-		<p id="footer-message" role="status" aria-live="polite" class="absolute bottom-1.5 left-0 right-0 text-center text-xs text-base-content/50 pointer-events-none z-10"></p>
+		<p id="footer-message" role="status" aria-live="polite" class="absolute bottom-1.5 inset-x-14 truncate text-center text-xs text-base-content/50 pointer-events-none z-10"></p>
 		<span class="absolute bottom-1.5 right-3 text-[10px] text-base-content/35 pointer-events-none" aria-label="앱 버전">v%DEAN_VERSION%</span>
 
 		<div
