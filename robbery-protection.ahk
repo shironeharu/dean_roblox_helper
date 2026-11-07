@@ -4,6 +4,8 @@ class RobberyProtection {
 	static Busy := false
 	static Count := 0
 	static PendingRespawns := Map()
+	static RespawnKeys := ["Esc", "r", "Enter", "r", "Enter", "r", "Enter"]
+	static RespawnDelayMs := 1000
 	static CurrentInput := 0
 	static States := Map()
 	static Jobs := Map()
@@ -77,8 +79,10 @@ class RobberyProtection {
 			return
 		}
 		this.Busy := true
+		stage := "capture tick"
 		try {
 			for hwnd, job in this.Jobs.Clone() {
+				stage := "capture result HWND " hwnd " PID " job.Pid " file=" job.Path ".result"
 				exitCode := 259
 				DllCall("GetExitCodeProcess", "ptr", job.Handle, "uint*", &exitCode)
 				if exitCode = 259 && FileExist(job.Path ".result")
@@ -89,6 +93,7 @@ class RobberyProtection {
 					this.Trace("HWND " hwnd ": capture timeout; restarting worker")
 				if exitCode = 0 && FileExist(job.Path ".ready") && this.ValidTarget(hwnd, job.Pid) {
 					if !job.HasOwnProp("MatchStart") {
+						stage := "publish match request HWND " hwnd " file=" job.Path ".match.request"
 						this.RequestMatch(job)
 						continue
 					}
@@ -115,12 +120,12 @@ class RobberyProtection {
 						this.CheckFrame(hwnd, job)
 					} else {
 						if !this.CaptureErrors.Has(hwnd)
-							this.Trace("capture failed HWND " hwnd " code " exitCode)
+							this.Trace("capture failed HWND " hwnd " PID " job.Pid " code " exitCode " ready=" (FileExist(job.Path ".ready") ? 1 : 0) " target=" this.ValidTarget(hwnd, job.Pid))
 						this.CaptureErrors[hwnd] := true
 					}
 				} catch as e {
 					this.CaptureErrors[hwnd] := true
-					this.Trace("HWND " hwnd ": " e.Message)
+					this.Trace("process frame HWND " hwnd " PID " job.Pid ": " e.Message)
 				} finally {
 					this.FinishJob(job)
 				}
@@ -156,7 +161,7 @@ class RobberyProtection {
 						this.RequestFrame(path)
 					} catch as e {
 						this.CaptureErrors[hwnd] := true
-						this.Trace("HWND " hwnd ": " e.Message)
+						this.Trace("start capture HWND " hwnd " PID " pid " file=" path ".request: " e.Message)
 					}
 				}
 			}
@@ -168,7 +173,7 @@ class RobberyProtection {
 			}
 		} catch as e {
 			; 한 번의 파일/캡처 오류로 감지와 필수 점프를 함께 끄지 않습니다.
-			this.Trace(e.Message)
+			this.Trace(stage ": " e.Message)
 		} finally {
 			this.Busy := false
 		}
@@ -305,7 +310,9 @@ class RobberyProtection {
 
 	static CheckFrame(hwnd, job) {
 		global AppDir
-		result := Trim(FileRead(job.Path ".match.result"))
+		try result := Trim(FileRead(job.Path ".match.result"))
+		catch as e
+			throw Error("read " job.Path ".match.result: " e.Message)
 		if result != "0" && result != "1"
 			throw Error("캡처 이미지 검색 실패")
 		found := result = "1"
@@ -335,8 +342,11 @@ class RobberyProtection {
 				filename := base "_" index ".jpg"
 				index += 1
 			}
-			FileMove(job.Path ".jpg", filename)
+			try FileMove(job.Path ".jpg", filename)
+			catch as e
+				throw Error("move " job.Path ".jpg -> " filename ": " e.Message)
 			state.Saved := true
+			this.Trace("warning photo saved HWND " hwnd " file=" filename)
 		}
 	}
 
@@ -364,18 +374,18 @@ class RobberyProtection {
 						input.Phase := "settle"
 						input.Due := A_TickCount + 450
 					} else if A_TickCount >= input.Due {
-						this.ReleaseInput(true)
+						this.ReleaseInput(true, "activation timeout")
 					}
 					return
 				}
 				if A_TickCount < input.Due
 					return
 				if !WinActive("ahk_id " job.Hwnd) || !this.ValidTarget(job.Hwnd, job.Pid) {
-					this.ReleaseInput(true)
+					this.ReleaseInput(true, "focus lost or target closed")
 					return
 				}
 				if input.Phase = "settle" {
-					key := ["Esc", "r", "Enter"][job.Index]
+					key := this.RespawnKeys[job.Index]
 					input.Key := key
 					SendEvent("{" key " down}")
 					job.State.Latched := true
@@ -384,15 +394,16 @@ class RobberyProtection {
 					input.Due := A_TickCount + 150
 				} else {
 					SendEvent("{" input.Key " up}")
+					this.Trace("respawn key sent HWND " job.Hwnd " PID " job.Pid " step=" job.Index "/" this.RespawnKeys.Length " key=" input.Key)
 					input.Key := ""
-					if job.Index = 3 {
+					if job.Index = this.RespawnKeys.Length {
 						this.PendingRespawns.Delete(job.Hwnd)
 						this.Count += 1
 						this.Trace("respawn keys completed HWND " job.Hwnd)
 						SendStatus()
 					} else {
 						job.Index += 1
-						job.Due := A_TickCount + 1800
+						job.Due := A_TickCount + this.RespawnDelayMs
 					}
 					this.ReleaseInput()
 				}
@@ -416,11 +427,11 @@ class RobberyProtection {
 			WinActivate("ahk_id " chosen.Hwnd)
 		} catch as e {
 			this.Trace("respawn: " e.Message)
-			this.ReleaseInput(true)
+			this.ReleaseInput(true, "input error")
 		}
 	}
 
-	static ReleaseInput(cancel := false) {
+	static ReleaseInput(cancel := false, reason := "session stopped") {
 		global afkInputBusy
 		if !IsObject(this.CurrentInput)
 			return
@@ -430,7 +441,7 @@ class RobberyProtection {
 			try SendEvent("{" input.Key " up}")
 		if cancel {
 			input.Job.State.Last := A_TickCount
-			this.Trace("respawn interrupted HWND " input.Job.Hwnd)
+			this.Trace("respawn interrupted HWND " input.Job.Hwnd " PID " input.Job.Pid " phase=" input.Phase " step=" input.Job.Index "/" this.RespawnKeys.Length " key=" this.RespawnKeys[input.Job.Index] " reason=" reason)
 			if this.PendingRespawns.Has(input.Job.Hwnd)
 				this.PendingRespawns.Delete(input.Job.Hwnd)
 		}

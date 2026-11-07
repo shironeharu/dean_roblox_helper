@@ -2,7 +2,7 @@
 ;@Ahk2Exe-SetName 딘 로블록스 도우미
 ;@Ahk2Exe-SetProductName 딘 로블록스 도우미
 ;@Ahk2Exe-SetDescription DEAN ROBLOX
-;@Ahk2Exe-SetVersion 1.22.0.0
+;@Ahk2Exe-SetVersion 1.23.0.0
 ;@Ahk2Exe-SetCompanyName Roblox_DEAN
 ;@Ahk2Exe-SetCopyright Roblox_DEAN
 #SingleInstance force
@@ -342,7 +342,7 @@ DoJump(protectionCycle := false) {
 			afkPendingWindows := targetWindows.Clone()
 		action := protectionCycle ? "Space" : jumpKey
 		keys := action = "Movement" ? ["Space", "a", "s", "d", "w"]
-			: action = "Respawn" ? ["Esc", "r", "Enter"] : [action]
+			: action = "Respawn" ? RobberyProtection.RespawnKeys : [action]
 		count := protectionCycle ? 1 : jumpCount
 		keyHoldMs := jumpKey = "Movement" ? 80 : holdMs
 		for hwnd, pid in afkPendingWindows.Clone() {
@@ -368,6 +368,14 @@ DoJump(protectionCycle := false) {
 				completed := true
 				Loop count {
 					for keyIndex, key in keys {
+						if running && action = "Respawn" && keyIndex > 1 {
+							WinActivate("ahk_id " hwnd)
+							if !WinWaitActive("ahk_id " hwnd, , 1) {
+								completed := false
+								break
+							}
+							Sleep(150)
+						}
 						if !running || !WinActive("ahk_id " hwnd) {
 							completed := false
 							break
@@ -378,7 +386,7 @@ DoJump(protectionCycle := false) {
 						finally SendEvent("{" key " up}")
 						; 메뉴와 확인창이 열린 뒤 다음 키를 보냅니다.
 						if action = "Respawn" && keyIndex < keys.Length
-							Sleep(1800)
+							Sleep(RobberyProtection.RespawnDelayMs)
 					}
 					if !completed
 						break
