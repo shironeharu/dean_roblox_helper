@@ -34,6 +34,25 @@ body {
   gap: 8px;
 }
 
+#view-shortcuts > .card-body {
+  padding: 16px 20px;
+  gap: 10px;
+}
+
+.shortcut-number::-webkit-inner-spin-button,
+.shortcut-number::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+#main-tabs .tab:not(.tab-active) {
+  color: color-mix(in srgb, var(--color-base-content) 28%, transparent);
+}
+
+#main-tabs .tab:not(.tab-active):hover {
+  color: color-mix(in srgb, var(--color-base-content) 60%, transparent);
+}
+
 @plugin "daisyui" {
   themes: false;
 };

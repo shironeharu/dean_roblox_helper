@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ko">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<link rel="stylesheet" href="./src/app.css" />
+		<title>DEAN ROBLOX · 채팅 설정</title>
+	</head>
+	<body class="overflow-hidden h-screen w-screen relative bg-base-100">
+		<div class="absolute inset-0 overflow-hidden pointer-events-none">
+			<div class="absolute -top-20 -left-16 w-56 h-56 rounded-full bg-primary/30 blur-3xl"></div>
+			<div class="absolute -bottom-20 -right-16 w-64 h-64 rounded-full bg-accent/30 blur-3xl"></div>
+		</div>
+		<div class="absolute top-0 inset-x-0 h-7 cursor-move z-20" onmousedown="ahk.DragParentWindow()"></div>
+		<button type="button" aria-label="닫기" class="btn btn-square btn-sm btn-ghost absolute top-1.5 right-1.5 z-30" onclick="ahk.CloseShortcutSettings()">✕</button>
+		<main class="relative flex h-full flex-col items-center gap-3 px-5 pb-5 pt-8">
+			<header class="text-center">
+				<h1 class="text-xl font-bold text-primary">채팅 단축키 설정</h1>
+				<p class="mt-1 text-xs text-base-content/60">조합 키와 숫자별 문구를 저장하세요.</p>
+			</header>
+			<form id="settings-form" class="card w-full flex-1 min-h-0 bg-base-100/40 backdrop-blur-xl border border-white/10 shadow-2xl">
+				<div class="card-body p-4 gap-3 min-h-0">
+					<label class="flex items-center justify-between gap-2 text-xs">
+						<span>조합 키</span>
+						<select id="modifier" class="select select-sm w-36">
+							<option>Ctrl</option><option>Alt</option><option>Shift</option><option>CapsLock</option>
+						</select>
+					</label>
+					<div id="phrases" class="grid grid-rows-10 gap-1 flex-1 min-h-0"></div>
+					<p id="message" class="text-xs text-[#f08080] text-center flex-none" role="status"></p>
+					<button id="save" type="submit" class="btn btn-primary w-full shrink-0" disabled>저장</button>
+				</div>
+			</form>
+		</main>
+		<script>
+			const form = document.getElementById("settings-form")
+			const modifier = document.getElementById("modifier")
+			const save = document.getElementById("save")
+			const message = document.getElementById("message")
+			const phrases = Array.from("1234567890", digit => {
+				const label = document.createElement("label")
+				label.className = "flex min-h-0 min-w-0 items-center gap-3 text-xs text-base-content/70"
+				const key = document.createElement("span")
+				key.className = "w-8 shrink-0"
+				key.textContent = `${digit}번`
+				const input = document.createElement("input")
+				input.className = "input input-sm h-full max-h-9 flex-1 min-w-0"
+				input.maxLength = 200
+				input.placeholder = "문구 입력"
+				label.append(key, input)
+				document.getElementById("phrases").append(label)
+				return input
+			})
+			window.chrome.webview.addEventListener("message", ({ data }) => {
+				if (data.type === "settings") {
+					modifier.value = data.modifier
+					phrases.forEach((input, i) => { input.value = data.phrases[i] })
+					save.disabled = false
+				}
+				if (data.type === "error") { message.textContent = data.message; save.disabled = false }
+			})
+			form.addEventListener("submit", async event => {
+				event.preventDefault()
+				if (save.disabled) return
+				save.disabled = true
+				message.textContent = ""
+				try { await ahk.SaveShortcutSettings(modifier.value, ...phrases.map(input => input.value)) }
+				catch { message.textContent = "저장하지 못했습니다."; save.disabled = false }
+			})
+			document.addEventListener("keydown", event => { if (event.key === "Escape") ahk.CloseShortcutSettings() })
+			ahk.GetShortcutSettings()
+		</script>
+	</body>
+</html>

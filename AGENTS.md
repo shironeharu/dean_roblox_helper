@@ -119,3 +119,5 @@ No test framework is configured. Verify changes manually by running `npm run dev
 - 검색 제한은 큐 대기와 실제 검색을 구분합니다. `.match.started` 이후 2.5초를 검색 제한으로 적용하고, 시작 전 큐 대기는 최대 5초 또는 창수×2.5초+1초로 제한합니다. 대기 프레임을 무조건 2.5초에 폐기하지 않습니다.
 
 - PC 인증: `device-access.ahk`는 메인 WebView·녹화·게임 핫키 초기화 전에 자동 검증합니다. 승인된 PC는 인증창 없이 진입하며 미등록·차단·만료·통신 실패일 때만 WebView 인증창을 표시합니다. 시스템 볼륨 ID와 MachineGuid의 해시만 사용합니다. GitHub `access/allowlist.txt`를 비동기로 확인하고 승인된 이름을 앱 상단에 표시합니다. `manage-access.yml`의 workflow_dispatch로 이름·차단·KST 만료일을 관리하며 `scripts/manage-access.mjs`가 등록 JSON과 ASCII/B64 앱 목록을 함께 갱신합니다. 실행 중 재확인 10분/통신 실패 유예 최대 30분이며 명시적 차단·만료는 중단합니다. 초기 목록은 빈 상태이며 자동 승인이나 개발용 우회가 없습니다. 상세 운영은 `access/README.md`, 관리 검증은 `node --test scripts/manage-access.test.mjs`를 사용합니다.
+
+- 채팅 단축키는 `chat-shortcuts.ahk`가 관리합니다. `setting.dean`의 `ChatShortcuts` 섹션에 켜기 상태, 조합 키, 숫자별 문구를 저장하며 대상 창은 실행 중에 선택합니다. 설정 팝업은 `frontend/chat-shortcuts.html`을 사용합니다. 단축키는 포커스와 대상 PID를 확인하며 잠수 입력·녹화와 겹치지 않습니다.

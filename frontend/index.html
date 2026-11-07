@@ -25,6 +25,16 @@
 						break
 					case "windows":
 						renderWindowList(data.content)
+						renderShortcutTargets(data.content)
+						break
+					case "shortcutState":
+						document.getElementById("shortcut-toggle").checked = data.content.enabled
+						document.getElementById("shortcut-delay").value = data.content.delayMs ?? 350
+						document.getElementById("shortcut-repeat-count").value = data.content.repeatCount ?? 1
+						document.getElementById("shortcut-summary").textContent = `${data.content.modifier} + 숫자`
+						break
+					case "shortcutStatus":
+						document.getElementById("shortcut-status").textContent = data.content
 						break
 					case "multiState":
 						renderMultiState(data.content)
@@ -199,13 +209,41 @@
 				document.getElementById("start-btn").disabled = false
 			}
 
+			function selectShortcutTargets() {
+				const selected = [...document.querySelectorAll('#shortcut-target input:checked')].map(input => input.value)
+				document.getElementById("shortcut-target-label").textContent = selected.length ? `${selected.length}개 로블록스 선택됨` : "로블록스 창을 선택하세요"
+				ahk.SelectShortcutTargets(selected.join(","))
+			}
+
+			function renderShortcutTargets(windows) {
+				const select = document.getElementById("shortcut-target")
+				const previous = new Set([...select.querySelectorAll('input:checked')].map(input => input.value))
+				select.replaceChildren()
+				if (!windows.length) select.textContent = "실행 중인 로블록스 창이 없습니다"
+				windows.forEach(({ hwnd, pid, label }, index) => {
+					const row = document.createElement("label")
+					row.className = "flex items-center gap-2 rounded px-2 py-1.5 hover:bg-base-300 cursor-pointer"
+					row.title = label
+					const checkbox = document.createElement("input")
+					checkbox.type = "checkbox"
+					checkbox.className = "w-4 h-4 accent-primary shrink-0"
+					checkbox.value = `${hwnd}:${pid}`
+					checkbox.checked = previous.has(checkbox.value)
+					checkbox.onchange = selectShortcutTargets
+					row.append(checkbox, `${index + 1}번 로블록스 (ID:${pid})`)
+					select.append(row)
+				})
+				selectShortcutTargets()
+			}
+
 			function switchTab(tab) {
 				if (recorderBusy && tab !== "record") return
-				for (const name of ["afk", "chat", "click", "multi", "record"]) {
+				for (const name of ["afk", "chat", "shortcuts", "click", "multi", "record"]) {
 					document.getElementById("view-" + name).classList.toggle("hidden", tab !== name)
 					document.getElementById("tab-" + name).classList.toggle("tab-active", tab === name)
 				}
 				if (tab === "multi") ahk.GetMultiState()
+				if (tab === "shortcuts") { ahk.GetShortcutState(); ahk.GetWindows() }
 			}
 
 			function renderRecorderState(state) {
@@ -413,12 +451,57 @@
 				<p class="text-xs text-base-content/60 text-center">딘이 만든 로블록스 보조도구</p>
 			</div>
 
-			<div role="tablist" class="tabs tabs-boxed w-80 [&_.tab]:text-[14px] [&_.tab]:whitespace-nowrap [&_.tab]:px-1 [&_.tab]:flex-1">
+			<div id="main-tabs" role="tablist" class="tabs tabs-boxed w-80 [&_.tab]:text-[14px] [&_.tab]:whitespace-nowrap [&_.tab]:px-1 [&_.tab]:flex-1">
 				<a role="tab" id="tab-afk" class="tab tab-active" onclick="switchTab('afk')">잠수</a>
-				<a role="tab" id="tab-chat" class="tab" onclick="switchTab('chat')">채팅</a>
+				<a role="tab" id="tab-chat" class="tab" onclick="switchTab('chat')">한영</a>
+				<a role="tab" id="tab-shortcuts" class="tab" onclick="switchTab('shortcuts')">채팅</a>
 				<a role="tab" id="tab-click" class="tab" onclick="switchTab('click')">클릭</a>
 				<a role="tab" id="tab-record" class="tab" onclick="switchTab('record')">거울</a>
 				<a role="tab" id="tab-multi" class="tab" onclick="switchTab('multi')">멀티</a>
+			</div>
+
+			<div id="view-shortcuts" class="card w-80 bg-base-100/40 backdrop-blur-xl border border-white/10 shadow-2xl hidden">
+				<div class="card-body p-4 gap-3">
+					<label class="flex justify-between items-center gap-2 text-sm">
+						<span>채팅 단축키</span>
+						<input id="shortcut-toggle" type="checkbox" class="toggle toggle-primary" onchange="ahk.ToggleShortcuts(this.checked)" />
+					</label>
+					<div class="flex flex-col gap-1">
+						<span id="shortcut-list-label" class="text-sm text-base-content/70">대상 로블록스 창</span>
+						<div class="flex gap-2">
+							<details class="relative flex-1 min-w-0">
+								<summary class="select select-bordered select-sm w-full cursor-pointer"><span id="shortcut-target-label" class="truncate">로블록스 창을 선택하세요</span></summary>
+								<fieldset id="shortcut-target" aria-labelledby="shortcut-list-label" class="absolute top-full left-0 right-0 mt-1 z-10 border border-white/20 rounded-box bg-base-300 shadow-xl text-xs p-1 max-h-40 overflow-y-auto min-w-0"></fieldset>
+							</details>
+							<button class="btn btn-square btn-sm" title="새로고침" aria-label="창 목록 새로고침" onclick="refreshWindows()">
+								<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4" aria-hidden="true">
+									<path d="M21 12a9 9 0 1 1-2.64-6.36" />
+									<path d="M21 3v6h-6" />
+								</svg>
+							</button>
+						</div>
+					</div>
+					<div class="rounded-box border border-primary/15 bg-primary/5 p-3 text-center">
+						<p id="shortcut-summary" class="text-sm text-primary">Ctrl + 숫자</p>
+						<p class="mt-2 text-xs leading-relaxed text-base-content/60">조합 키와 숫자를 눌렀다 떼면<br />선택한 창에 순서대로 문구를 보냅니다.</p>
+					</div>
+					<label class="flex items-center justify-between gap-2 text-xs">
+						<span>채팅 입력 딜레이</span>
+						<span class="flex items-center gap-2">
+							<input id="shortcut-delay" type="number" min="0" max="5000" step="1" value="350" class="shortcut-number input input-sm w-22 text-center" onchange="ahk.SetShortcutDelay(this.value)" />
+							<span class="w-5 text-center text-base-content/60">ms</span>
+						</span>
+					</label>
+					<label class="flex items-center justify-between gap-2 text-xs">
+						<span>채팅 보낼 횟수</span>
+						<span class="flex items-center gap-2">
+							<input id="shortcut-repeat-count" type="number" min="1" max="10" step="1" value="1" class="shortcut-number input input-sm w-22 text-center" onchange="ahk.SetShortcutRepeatCount(this.value)" />
+							<span class="w-5 text-center text-base-content/60">회</span>
+						</span>
+					</label>
+					<button class="btn btn-primary w-full mt-auto shrink-0" onclick="ahk.OpenShortcutSettings()">문구 및 조합 키 설정</button>
+					<p id="shortcut-status" class="flex-none text-xs text-center text-base-content/60 empty:hidden" role="status" aria-live="polite"></p>
+				</div>
 			</div>
 
 			<div id="view-record" class="card w-80 bg-base-100/40 backdrop-blur-xl border border-white/10 shadow-2xl hidden">
@@ -627,6 +710,7 @@
 		</div>
 
 		<p id="footer-message" role="status" aria-live="polite" class="absolute bottom-1.5 left-0 right-0 text-center text-xs text-base-content/50 pointer-events-none z-10"></p>
+		<span class="absolute bottom-1.5 right-3 text-[10px] text-base-content/35 pointer-events-none" aria-label="앱 버전">v%DEAN_VERSION%</span>
 
 		<div
 			class="absolute top-0 left-0 right-0 h-7 cursor-move z-20"

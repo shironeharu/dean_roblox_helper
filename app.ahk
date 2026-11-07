@@ -2,7 +2,7 @@
 ;@Ahk2Exe-SetName 딘 로블록스 도우미
 ;@Ahk2Exe-SetProductName 딘 로블록스 도우미
 ;@Ahk2Exe-SetDescription DEAN ROBLOX
-;@Ahk2Exe-SetVersion 1.23.0.0
+;@Ahk2Exe-SetVersion 1.25.0.0
 ;@Ahk2Exe-SetCompanyName Roblox_DEAN
 ;@Ahk2Exe-SetCopyright Roblox_DEAN
 #SingleInstance force
@@ -37,6 +37,7 @@ SetWinDelay(-1)
 #Include ./robbery-patterns.ahk
 #Include ./warning-matcher.ahk
 #Include ./robbery-protection.ahk
+#Include ./chat-shortcuts.ahk
 
 ConfigFile   := AppDir "\setting.dean"
 ; 예전 이름(setting.milky)의 설정이 있으면 새 이름으로 옮겨서 값을 유지합니다.
@@ -127,6 +128,12 @@ MyGui.AddCallbackToScript("SetJumpKey", WebviewSetJumpKey)
 MyGui.AddCallbackToScript("SetJumpCount", WebviewSetJumpCount)
 MyGui.AddCallbackToScript("SetAfkInterval", WebviewSetAfkInterval)
 MyGui.AddCallbackToScript("GetChatState", WebviewGetChatState)
+MyGui.AddCallbackToScript("GetShortcutState", ObjBindMethod(ChatShortcuts, "SendState"))
+MyGui.AddCallbackToScript("ToggleShortcuts", ObjBindMethod(ChatShortcuts, "Toggle"))
+MyGui.AddCallbackToScript("SetShortcutDelay", ObjBindMethod(ChatShortcuts, "SetDelay"))
+MyGui.AddCallbackToScript("SetShortcutRepeatCount", ObjBindMethod(ChatShortcuts, "SetRepeatCount"))
+MyGui.AddCallbackToScript("SelectShortcutTargets", ObjBindMethod(ChatShortcuts, "SelectTargets"))
+MyGui.AddCallbackToScript("OpenShortcutSettings", ObjBindMethod(ChatShortcuts, "OpenSettings"))
 MyGui.AddCallbackToScript("PickChatRegion", WebviewPickChatRegion)
 MyGui.AddCallbackToScript("SetChatRegionEnabled", WebviewSetChatRegionEnabled)
 MyGui.AddCallbackToScript("SetChatEnabled", WebviewSetChatEnabled)
@@ -157,6 +164,7 @@ MyGui.Show("w380 h536")
 ApplyChatEnabled(chatEnabled)
 SetupClickHotkeys()
 PcRecorder.Init()
+ChatShortcuts.Init()
 SetTimer(PollImeState, 400)
 DeviceAccess.OnChanged := (*) => WebviewGetAccessInfo(0)
 DeviceAccess.OnRevoked := HandleAccessRevoked
@@ -171,6 +179,7 @@ WebviewGetAccessInfo(webview, *) {
 HandleAccessRevoked(message) {
 	global holdOn, macroOn, AccessClosingMessage
 	AccessClosingMessage := message
+	ChatShortcuts.CloseSettings()
 	WebviewStop(0)
 	if PcRecorder.Busy
 		PcRecorder.Stop()
@@ -922,6 +931,7 @@ mygui_Close(*) {
 }
 trueExit(ExitReason, ExitCode){
 	DeviceAccess.Shutdown()
+	ChatShortcuts.CloseSettings()
 	RobberyProtection.Dispose()
 	if PcRecorder.Busy
 		PcRecorder.Stop()
