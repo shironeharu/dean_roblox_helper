@@ -6,6 +6,7 @@ class RobberyProtection {
 	static PendingRespawns := Map()
 	static RespawnKeys := ["Esc", "r", "Enter", "r", "Enter", "r", "Enter"]
 	static RespawnDelayMs := 1000
+	static RespawnKeyCode(key) => key = "r" ? "sc013" : (key = "Enter" ? "sc01C" : key)
 	static CurrentInput := 0
 	static States := Map()
 	static Jobs := Map()
@@ -385,7 +386,7 @@ class RobberyProtection {
 					return
 				}
 				if input.Phase = "settle" {
-					key := this.RespawnKeys[job.Index]
+					key := this.RespawnKeyCode(this.RespawnKeys[job.Index])
 					input.Key := key
 					SendEvent("{" key " down}")
 					job.State.Latched := true
@@ -394,9 +395,10 @@ class RobberyProtection {
 					input.Due := A_TickCount + 150
 				} else {
 					SendEvent("{" input.Key " up}")
-					this.Trace("respawn key sent HWND " job.Hwnd " PID " job.Pid " step=" job.Index "/" this.RespawnKeys.Length " key=" input.Key)
+					this.Trace("respawn key sent HWND " job.Hwnd " PID " job.Pid " step=" job.Index "/" this.RespawnKeys.Length " key=" this.RespawnKeys[job.Index] " code=" input.Key)
 					input.Key := ""
-					if job.Index = this.RespawnKeys.Length {
+					completed := job.Index = this.RespawnKeys.Length
+					if completed {
 						this.PendingRespawns.Delete(job.Hwnd)
 						this.Count += 1
 						this.Trace("respawn keys completed HWND " job.Hwnd)
@@ -405,7 +407,7 @@ class RobberyProtection {
 						job.Index += 1
 						job.Due := A_TickCount + this.RespawnDelayMs
 					}
-					this.ReleaseInput()
+					this.ReleaseInput(false, "session stopped", completed)
 				}
 				return
 			}
@@ -422,7 +424,9 @@ class RobberyProtection {
 				this.PendingRespawns.Delete(chosen.Hwnd)
 				return
 			}
-			this.CurrentInput := {Job: chosen, Previous: WinExist("A"), Phase: "activate", Due: A_TickCount + 1000, Key: ""}
+			if !chosen.HasOwnProp("Previous")
+				chosen.Previous := WinExist("A")
+			this.CurrentInput := {Job: chosen, Previous: chosen.Previous, Phase: "activate", Due: A_TickCount + 1000, Key: ""}
 			afkInputBusy := true
 			WinActivate("ahk_id " chosen.Hwnd)
 		} catch as e {
@@ -431,7 +435,7 @@ class RobberyProtection {
 		}
 	}
 
-	static ReleaseInput(cancel := false, reason := "session stopped") {
+	static ReleaseInput(cancel := false, reason := "session stopped", restoreFocus := true) {
 		global afkInputBusy
 		if !IsObject(this.CurrentInput)
 			return
@@ -445,7 +449,7 @@ class RobberyProtection {
 			if this.PendingRespawns.Has(input.Job.Hwnd)
 				this.PendingRespawns.Delete(input.Job.Hwnd)
 		}
-		if input.Previous && WinExist("ahk_id " input.Previous) && WinActive("ahk_id " input.Job.Hwnd)
+		if restoreFocus && input.Previous && WinExist("ahk_id " input.Previous) && WinActive("ahk_id " input.Job.Hwnd)
 			try WinActivate("ahk_id " input.Previous)
 		afkInputBusy := false
 	}
