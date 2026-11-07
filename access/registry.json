@@ -2,6 +2,12 @@
   "schema": 1,
   "devices": [
     {
+      "id": "DEAN-08CAEEF3-E7E814F8-8893B8D2-F22C6F56",
+      "name": "민우",
+      "blocked": false,
+      "expires": ""
+    },
+    {
       "id": "DEAN-21220D7E-8A869AE9-0E201C78-82727F81",
       "name": "DEAN",
       "blocked": false,
